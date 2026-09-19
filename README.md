@@ -56,6 +56,8 @@ Prompt phân loại nhỏ, có schema, ba CLI chạy song song:
 
 Chạy song song thì thời gian chờ bằng juror chậm nhất. Memory không hạ được sàn này; nó giúp tốc độ bằng cách **giảm số lần phải leo thang lên model cao** và **giảm thời gian agent điều tra repo**.
 
+Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHMARK.md), dataset + report trong [`bench/`](bench/).
+
 ## Cách dùng dự kiến
 
 ```bash

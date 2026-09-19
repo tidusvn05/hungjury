@@ -109,6 +109,11 @@ struct ArmStats {
     hung: usize,
     /// Decided + correct.
     correct: usize,
+    /// Spawned CLI calls (juror attempts + judge calls).
+    calls: usize,
+    /// Per-case decision wall ms (for mean/p95).
+    #[serde(skip)]
+    walls: Vec<u64>,
 }
 
 impl ArmStats {
@@ -131,6 +136,15 @@ impl ArmStats {
 
 /// Accumulate one response into an arm.
 fn score_response(stats: &mut ArmStats, resp: &Response, expected: &BTreeMap<String, serde_json::Value>) {
+    stats.walls.push(resp.usage.wall_ms);
+    stats.calls += resp.usage.jurors.len()
+        + resp
+            .usage
+            .jurors
+            .iter()
+            .map(|j| j.retries as usize)
+            .sum::<usize>()
+        + usize::from(resp.usage.judge.is_some());
     for (key, want) in expected {
         match resp.answers.get(key).and_then(|a| answer_matches(a, want)) {
             Some(true) => {
@@ -157,6 +171,7 @@ pub async fn run(
     base: &CliOverrides,
     config_path: Option<&Path>,
     seed: u64,
+    label: Option<&str>,
 ) -> Result<()> {
     let mut cases = load_cases(cases_path)?;
     shuffle(&mut cases, seed);
@@ -288,6 +303,8 @@ pub async fn run(
         .collect::<Vec<_>>()
         .await;
         for (i, call, usage) in results {
+            judge_stats.calls += 1;
+            judge_stats.walls.push(usage.ms);
             match call {
                 Some(call) => {
                     for (key, want) in &test[i].expected {
@@ -324,6 +341,7 @@ pub async fn run(
     let go = closed >= 0.5 || (hung_drop >= 0.3 && ma >= ja - 0.001);
 
     let report = serde_json::json!({
+        "label": label,
         "cases": n,
         "train": train.len(),
         "test": test.len(),
@@ -348,12 +366,28 @@ pub async fn run(
 }
 
 fn arm_json(s: &ArmStats) -> serde_json::Value {
+    let mut w = s.walls.clone();
+    w.sort_unstable();
+    let n = w.len();
+    let mean = if n == 0 {
+        0.0
+    } else {
+        w.iter().map(|x| *x as f64).sum::<f64>() / n as f64
+    };
+    let p95 = if n == 0 {
+        0
+    } else {
+        w[((n as f64 * 0.95).ceil() as usize).max(1) - 1]
+    };
     serde_json::json!({
         "decided": s.decided,
         "hung": s.hung,
         "correct": s.correct,
         "accuracy": s.accuracy(),
         "hung_rate": s.hung_rate(),
+        "calls": s.calls,
+        "wall_ms_mean": mean,
+        "wall_ms_p95": p95,
     })
 }
 
@@ -413,6 +447,68 @@ mod tests {
             judge: None,
         };
         assert_eq!(answer_matches(&h, &json!(true)), None);
+    }
+
+    #[test]
+    fn arm_json_reports_calls_and_latency() {
+        use crate::response::{DecidedBy, JurorUsage, JudgeUsage, MemoryUse, Response, Usage};
+        let resp = Response {
+            id: "dec_x".into(),
+            decided_by: DecidedBy::Jury,
+            answers: BTreeMap::from([(
+                "k".into(),
+                AnswerOut::Choice {
+                    choice: "a".into(),
+                    probabilities: BTreeMap::new(),
+                    confidence: Some(0.9),
+                    judge: None,
+                },
+            )]),
+            hung: vec![],
+            memory: MemoryUse::default(),
+            usage: Usage {
+                wall_ms: 100,
+                jurors: vec![
+                    JurorUsage {
+                        juror: "a".into(),
+                        sample: 0,
+                        status: "ok".into(),
+                        ms: 100,
+                        retries: 1,
+                        answers: None,
+                        error: None,
+                        input_tokens: None,
+                        output_tokens: None,
+                    },
+                    JurorUsage {
+                        juror: "b".into(),
+                        sample: 0,
+                        status: "ok".into(),
+                        ms: 90,
+                        retries: 0,
+                        answers: None,
+                        error: None,
+                        input_tokens: None,
+                        output_tokens: None,
+                    },
+                ],
+                judge: Some(JudgeUsage {
+                    model: "m".into(),
+                    status: "ok".into(),
+                    ms: 50,
+                    wrote: vec![],
+                    error: None,
+                }),
+            },
+        };
+        let mut stats = ArmStats::default();
+        let expected = BTreeMap::from([("k".into(), json!("a"))]);
+        score_response(&mut stats, &resp, &expected);
+        let j = arm_json(&stats);
+        assert_eq!(j["calls"], json!(4)); // 2 jurors + 1 retry + 1 judge
+        assert_eq!(j["wall_ms_mean"], json!(100.0));
+        assert_eq!(j["wall_ms_p95"], json!(100));
+        assert_eq!(j["accuracy"], json!(1.0));
     }
 
     #[test]

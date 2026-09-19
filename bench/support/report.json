@@ -1,0 +1,35 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.9611111111111111,
+      "correct": 173,
+      "decided": 180,
+      "hung": 0,
+      "hung_rate": 0.0
+    },
+    "jury": {
+      "accuracy": 0.9111111111111111,
+      "correct": 164,
+      "decided": 180,
+      "hung": 0,
+      "hung_rate": 0.0
+    },
+    "jury_memory": {
+      "accuracy": 0.95,
+      "correct": 171,
+      "decided": 180,
+      "hung": 0,
+      "hung_rate": 0.0
+    }
+  },
+  "cases": 120,
+  "go": {
+    "accuracy_gap_jury_to_judge": 0.050000000000000044,
+    "gap_closed_by_memory": 0.7777777777777766,
+    "hung_rate_drop": 0.0,
+    "pass": true
+  },
+  "seed": 42,
+  "test": 60,
+  "train": 60
+}

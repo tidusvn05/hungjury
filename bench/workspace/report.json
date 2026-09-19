@@ -1,0 +1,45 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.37777777777777777,
+      "calls": 30,
+      "correct": 34,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "wall_ms_mean": 30250.666666666668,
+      "wall_ms_p95": 42674
+    },
+    "jury": {
+      "accuracy": 0.8666666666666667,
+      "calls": 93,
+      "correct": 78,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "wall_ms_mean": 65251.26666666667,
+      "wall_ms_p95": 104894
+    },
+    "jury_memory": {
+      "accuracy": 0.8735632183908046,
+      "calls": 93,
+      "correct": 76,
+      "decided": 87,
+      "hung": 3,
+      "hung_rate": 0.03333333333333333,
+      "wall_ms_mean": 86922.2,
+      "wall_ms_p95": 116199
+    }
+  },
+  "cases": 60,
+  "go": {
+    "accuracy_gap_jury_to_judge": -0.48888888888888893,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "pass": false
+  },
+  "label": "workspace",
+  "seed": 42,
+  "test": 30,
+  "train": 30
+}

@@ -10,11 +10,13 @@ use hungjury::request::{Request, State};
 
 #[tokio::main]
 async fn main() {
-    let mut over = CliOverrides::default();
-    over.no_memory = true;
-    over.no_cache = true;
-    over.jurors = Some(vec!["claude:haiku".into()]);
-    over.escalate = Some(hungjury::config::Escalate::Off);
+    let over = CliOverrides {
+        no_memory: true,
+        no_cache: true,
+        jurors: Some(vec!["claude:haiku".into()]),
+        escalate: Some(hungjury::config::Escalate::Off),
+        ..CliOverrides::default()
+    };
     let cfg = Config::load(&over, None).unwrap();
     let ctx = DecideCtx::new(cfg, None).unwrap();
 

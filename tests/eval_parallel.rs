@@ -12,22 +12,16 @@ use hungjury::jury::{self, DecideCtx};
 use hungjury::request::Request;
 
 fn ctx_with_delay(ms: u64) -> DecideCtx {
-    let mut over = CliOverrides::default();
-    over.no_memory = true;
-    over.no_cache = true;
-    over.jurors = Some(vec![
-        "mock:a".into(),
-        "mock:b".into(),
-        "mock:c".into(),
-    ]);
+    let over = CliOverrides {
+        no_memory: true,
+        no_cache: true,
+        jurors: Some(vec!["mock:a".into(), "mock:b".into(), "mock:c".into()]),
+        ..CliOverrides::default()
+    };
     let cfg = Config::load(&over, None).unwrap();
     let canned = |_name: &'static str| -> Arc<dyn AgentBackend> {
         Arc::new(
-            MockBackend::new(move |_req| {
-                Ok(format!(
-                    r#"{{"q1": "x", "q2": true, "q3": 1}}"#
-                ))
-            })
+            MockBackend::new(move |_req| Ok(r#"{"q1": "x", "q2": true, "q3": 1}"#.to_string()))
             .with_delay(Duration::from_millis(ms)),
         )
     };
@@ -55,7 +49,7 @@ async fn cases_overlap_under_buffer_unordered() {
     let results: Vec<_> = stream::iter(
         cases.iter().enumerate().map(|(i, c)| {
             let ctx = &ctx;
-            async move { (i, jury::decide(ctx, &c).await) }
+            async move { (i, jury::decide(ctx, c).await) }
         }),
     )
     .buffer_unordered(par)

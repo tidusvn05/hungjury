@@ -163,6 +163,9 @@ struct EvalArgs {
     /// Shuffle seed (deterministic).
     #[arg(long, default_value = "1")]
     seed: u64,
+    /// Benchmark/domain label recorded in the report.
+    #[arg(long)]
+    label: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -298,6 +301,7 @@ async fn dispatch(
                 over,
                 cfg_path,
                 args.seed,
+                args.label.as_deref(),
             )
             .await?;
             Ok(0)

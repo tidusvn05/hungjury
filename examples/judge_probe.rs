@@ -12,9 +12,11 @@ use hungjury::request::{Request, State};
 
 #[tokio::main]
 async fn main() {
-    let mut over = CliOverrides::default();
-    over.no_cache = true;
-    over.judge = Some("claude:opus@high".into());
+    let over = CliOverrides {
+        no_cache: true,
+        judge: Some("claude:opus@high".into()),
+        ..CliOverrides::default()
+    };
     let cfg = Config::load(&over, None).unwrap();
     let ctx = DecideCtx::new(cfg, None).unwrap();
 
@@ -36,7 +38,7 @@ async fn main() {
             async move {
                 let (call, usage) = judge::judge_call(
                     ctx,
-                    &c,
+                    c,
                     "",
                     &[],
                     &BTreeMap::new(),

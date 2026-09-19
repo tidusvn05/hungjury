@@ -1,0 +1,45 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.6888888888888889,
+      "calls": 30,
+      "correct": 62,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "wall_ms_mean": 17790.933333333334,
+      "wall_ms_p95": 25875
+    },
+    "jury": {
+      "accuracy": 0.8,
+      "calls": 90,
+      "correct": 72,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "wall_ms_mean": 28927.366666666665,
+      "wall_ms_p95": 54837
+    },
+    "jury_memory": {
+      "accuracy": 0.6777777777777778,
+      "calls": 90,
+      "correct": 61,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "wall_ms_mean": 28608.4,
+      "wall_ms_p95": 68552
+    }
+  },
+  "cases": 60,
+  "go": {
+    "accuracy_gap_jury_to_judge": -0.11111111111111116,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "pass": false
+  },
+  "label": "adversarial",
+  "seed": 42,
+  "test": 30,
+  "train": 30
+}

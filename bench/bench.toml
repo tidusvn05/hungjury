@@ -1,0 +1,5 @@
+# Benchmark config — high daily cap + bounded concurrency so a full
+# domain (~600 spawned calls) can't hit the default 500/day limit.
+[limits]
+daily_cap = 5000
+max_concurrency = 8
