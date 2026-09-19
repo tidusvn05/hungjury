@@ -578,6 +578,70 @@ impl Store {
         })
     }
 
+    /// Resolve an id prefix (the short `[id:…]` tags shown to the judge)
+    /// to a full entry id — `None` when absent, ambiguous, or the prefix
+    /// is too short to be safe (<4 chars).
+    pub fn id_by_prefix(&self, prefix: &str) -> Result<Option<String>> {
+        if prefix.len() < 4 {
+            return Ok(None);
+        }
+        let like = format!("{}%", prefix.replace(['%', '_'], ""));
+        self.with_conn(|c| {
+            let mut st = c
+                .prepare("SELECT id FROM entries WHERE id LIKE ?1 LIMIT 2")
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let rows = st
+                .query_map([like], |r| r.get::<_, String>(0))
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let ids: Vec<String> = rows
+                .collect::<std::result::Result<_, _>>()
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            Ok((ids.len() == 1).then(|| ids.into_iter().next().unwrap()))
+        })
+    }
+
+    /// Raise every active judge ruling on `scope` to at least `trust`
+    /// (re-confirmation of provisional escalation rulings). Returns how
+    /// many entries changed.
+    pub fn promote_rulings(&self, scope: &str, trust: f64) -> Result<usize> {
+        self.with_conn(|c| {
+            c.execute(
+                "UPDATE entries SET trust = MAX(trust, ?2)
+                 WHERE scope = ?1 AND kind = 'ruling' AND status = 'active'",
+                params![scope, trust],
+            )
+            .map_err(|e| Error::Memory(e.to_string()))
+        })
+    }
+
+    /// Active rulings older than `days` become `stale`. `0` ⇒ no-op.
+    /// Returns how many entries expired.
+    pub fn expire_rulings(&self, days: u32) -> Result<usize> {
+        if days == 0 {
+            return Ok(0);
+        }
+        let secs = days as i64 * 86_400;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        // RFC3339 UTC — lexical order matches chronological order.
+        self.expire_rulings_before(&crate::util::rfc3339_at(now - secs))
+    }
+
+    /// Active rulings created before `cutoff` (RFC3339) become `stale`.
+    /// Split out from [`expire_rulings`] so tests can pick the cutoff.
+    pub fn expire_rulings_before(&self, cutoff: &str) -> Result<usize> {
+        self.with_conn(|c| {
+            c.execute(
+                "UPDATE entries SET status = 'stale'
+                 WHERE kind = 'ruling' AND status = 'active' AND created_at < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| Error::Memory(e.to_string()))
+        })
+    }
+
     /// Change an entry's status (and optional `superseded_by`).
     pub fn set_status(&self, id: &str, status: Status, superseded_by: Option<&str>) -> Result<()> {
         self.with_conn(|c| {

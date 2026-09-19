@@ -135,9 +135,49 @@ hungjury learn --audit --recent 20
 hungjury feedback <decision-id> --set dept=technical --note "label sai"
 ```
 
-Khi người hoặc audit phủ định một quyết định jury đã *decided* (không hung), các ruling/precedent do judge ghi cho câu hỏi đó bị đánh `contested` — vẫn xem được bằng `memory list --all`, không còn được inject vào prompt. Đây là guard chống memory lan truyền lỗi của judge (xem `docs/BENCHMARK.md`).
+Khi người hoặc audit phủ định một quyết định jury đã *decided* (không hung), các ruling/precedent do judge ghi cho câu hỏi đó bị đánh `contested` — vẫn xem được bằng `memory list --all` / `memory review`, không còn được inject vào prompt. Đây là guard chống memory lan truyền lỗi của judge (xem `docs/BENCHMARK.md`).
 
-SDK Python/TypeScript (giữ hình dạng `system_one(state, questions)`) sẽ là lớp bọc mỏng gọi binary — làm sau.
+### Tin cậy & vòng đời rulings
+
+- **`min_quorum`** (mặc định 2): câu hỏi có ít hơn quorum ballot hợp lệ (juror timeout/lỗi) được coi là *hung* — một juror sống sót duy nhất không được âm thầm quyết định.
+- **Provisional rulings**: ruling mà judge rút ra từ một câu jury *không quyết được* (hung/quorum) ghi với `trust = memory.provisional_trust` (mặc định 0.4, thấp hơn judge thường 0.8). Nó chỉ được nâng lên full trust khi `feedback` hoặc `learn --audit` sau đó *tái xác nhận* verdict của judge trên scope đó.
+- **`supersedes`**: rulings trong prompt judge có gắn `[id:…]`; judge có thể retire ruling cũ khi viết ruling mới (`"supersedes": "<id-prefix>"`).
+- **`memory.ruling_ttl_days`** (mặc định 0 = tắt): rulings `active` quá N ngày tự thành `stale` mỗi lần `learn` chạy.
+- **`memory review`** liệt kê contested entries chờ duyệt; `memory resolve <id> --accept|--reject` để xử lý.
+
+### Chi phí
+
+`[costs]` trong config map backend → USD/call; response `usage.est_cost_usd` và eval `est_cost_usd` ước tính theo số call thật (gồm retry):
+
+```toml
+[costs]
+claude = 0.08
+codex = 0.05
+devin  = 0.05
+```
+
+### SDK Python
+
+`sdk/python/hungjury.py` — wrapper mỏng không dependency, gọi binary qua stdin:
+
+```python
+from hungjury import system_one, feedback
+
+d = system_one(
+    "I was charged twice, refund please — this blocks payroll.",
+    {"dept": {"type": "choice", "id": "support.dept",
+              "instructions": "which team",
+              "criteria": {"billing": "payment/refund", "technical": "bugs"}},
+     "urgent": {"type": "noul", "id": "support.urgent",
+                "instructions": "time-sensitive"}},
+)
+if not d.ok:            # exit_code == 2 → hung, route to a human
+    route_to_human(d)
+print(d.answers)        # {"dept": {"choice": "billing", ...}, ...}
+feedback(d.id, {"dept": "billing"}, note="correct")
+```
+
+TypeScript SDK vẫn để sau — cùng hình dạng `system_one(state, questions)`.
 
 ## Thiết kế
 

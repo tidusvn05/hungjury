@@ -228,6 +228,28 @@ Contested entries written: `pr_review` 0, `adversarial` 1 ruling
   because the seed-42 test half happened to draw unanimous-vote cases;
   hung-rate movement needs a test split that actually splits jurors.
 
+### Aligned-ceiling run: `adversarial` + `--policy-file`
+
+Same domain, fresh `home_policy`, `policy.md` injected into **both**
+juror and judge prompts (seed 42):
+
+| arm | no policy | + policy |
+|---|---|---|
+| jury | 77% | **88%** |
+| jury+memory | 69% | 84% |
+| judge (cold) | 68% | **86%** |
+| judge_informed | 70% | **86%** |
+
+- **Judge +17 pts** (68→86) — confirms the gap was *policy mismatch*,
+  not model capacity. The durable fix for memory poisoning is aligning
+  the judge prompt with the task's labeling policy.
+- Memory penalty shrank to −3.4 pts (within the ±5–8 noise band) —
+  policy-aligned judges write rulings that mostly don't hurt.
+- **Provisional trust fired in production**: the db shows one ruling at
+  `trust=0.4` (hung-key escalation, awaiting confirmation) beside one
+  at 0.8.
+- `min_quorum=2` active; `hung_rate` 0 again on the test half.
+
 ## Limitations (unchanged)
 
 - Labels are a written policy per domain, not objective ground truth —

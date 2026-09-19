@@ -60,7 +60,8 @@ fn judge_schema(questions: &BTreeMap<String, Question>) -> serde_json::Value {
                     "type": "object",
                     "properties": {
                         "question": {"type": "string"},
-                        "text": {"type": "string"}
+                        "text": {"type": "string"},
+                        "supersedes": {"type": "string"}
                     },
                     "required": ["question", "text"],
                     "additionalProperties": false
@@ -306,10 +307,11 @@ fn render_judge_prompt(
 }
 
 /// The jury's winning ballot for an answer the jury *decided* (not hung
-/// under `hung_threshold`) — `None` when hung, i.e. no trusted majority
-/// for the judge's verdict to conflict with.
+/// under `hung_threshold`) — `None` when hung or below quorum
+/// (`confidence == None` means too few valid ballots), i.e. no trusted
+/// majority for the judge's verdict to conflict with.
 fn decided_ballot(a: &AnswerOut, hung_threshold: f64) -> Option<Ballot> {
-    if crate::jury::vote::is_hung(a, hung_threshold) {
+    if a.confidence().is_none() || crate::jury::vote::is_hung(a, hung_threshold) {
         return None;
     }
     Some(match a {
@@ -349,7 +351,10 @@ pub fn conflict_keys(
 /// Persist rulings/facts/juror_stats + one precedent per `precedent_keys`.
 /// No-op under `--memory-readonly`. Rulings/precedents for keys where the
 /// judge contradicts a decided jury majority are stored `contested`
-/// (excluded from retrieval, still auditable). Returns the ids written.
+/// (excluded from retrieval, still auditable). Rulings on keys the jury
+/// never decided get `provisional_trust` — they become full-trust only
+/// after a later human/audit re-confirms them. A ruling's optional
+/// `supersedes` id retires the older ruling it names. Returns written ids.
 #[allow(clippy::too_many_arguments)]
 pub fn commit_judge(
     store: &Store,
@@ -360,6 +365,7 @@ pub fn commit_judge(
     juror_ballots: &[(String, BTreeMap<String, Ballot>)],
     answers: &BTreeMap<String, AnswerOut>,
     hung_threshold: f64,
+    provisional_trust: f64,
     repo_id: Option<&str>,
     ws_path: Option<&Path>,
     judge_str: &str,
@@ -385,6 +391,13 @@ pub fn commit_judge(
             if text.is_empty() || text.len() > 300 {
                 continue;
             }
+            // Provisional: the jury never decided this key (hung or below
+            // quorum), so the ruling is escalation-derived — lower trust
+            // until a later human/audit confirms it.
+            let jury_decided = answers
+                .get(key)
+                .and_then(|a| decided_ballot(a, hung_threshold))
+                .is_some();
             let e = NewEntry {
                 kind: Kind::Ruling,
                 scope: crate::memory::store::q_scope(&q.qid()),
@@ -394,13 +407,22 @@ pub fn commit_judge(
                 }),
                 text: format!("{} {text}", q.instructions()),
                 source: Source::Judge,
-                trust: Source::Judge.base_trust(),
+                trust: if jury_decided {
+                    Source::Judge.base_trust()
+                } else {
+                    provisional_trust
+                },
                 author: Some(judge_str.to_string()),
                 origin: origin.clone(),
             };
             if let Ok((id, true)) = store.insert(&e) {
                 if contested.contains(key) {
                     let _ = store.set_status(&id, Status::Contested, None);
+                } else if let Some(old) = r["supersedes"].as_str()
+                    && let Some(old_id) = store.id_by_prefix(old).ok().flatten()
+                    && old_id != id
+                {
+                    let _ = store.set_status(&old_id, Status::Superseded, Some(&id));
                 }
                 wrote.push(id);
             }

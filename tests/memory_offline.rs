@@ -581,3 +581,231 @@ fn policy_block_renders_and_loads() {
     let loaded = Config::load(&over, Some(empty_toml.as_path())).unwrap();
     assert_eq!(loaded.policy.as_deref(), Some("domain rules here"));
 }
+
+/// Quorum: a single surviving juror must not decide — below
+/// `min_quorum` ballots the key hangs (escalate=off ⇒ exit 2).
+#[tokio::test]
+async fn min_quorum_hangs_single_juror() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "x",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "i", "criteria": {"billing": "m", "technical": "t"}}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|_| Ok(r#"{"dept": "billing"}"#.to_string()));
+    let mut c = cfg(&dir, &["mock:a"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 2);
+    assert_eq!(resp.hung, vec!["dept".to_string()]);
+
+    // min_quorum=1 restores the old single-ballot behaviour.
+    let mut c = cfg(&dir, &["mock:a"], "mock:j");
+    c.escalate = Escalate::Off;
+    c.min_quorum = 1;
+    c.no_cache = true;
+    let ctx = ctx_with(c, MockBackend::new(|_| Ok(r#"{"dept": "billing"}"#.to_string())));
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 0);
+    assert!(resp.hung.is_empty());
+}
+
+/// Rulings distilled on escalated (undecided) keys are provisional:
+/// `provisional_trust`, still active — and a judge answering a
+/// quorum-failed key is never "overriding a majority".
+#[tokio::test]
+async fn escalation_rulings_are_provisional() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "x",
+            "questions": {
+                "urgent": {"type": "noul", "id": "support.urgent", "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    // One juror (votes=1 < quorum) → hung → sync escalate → judge answers.
+    let backend = MockBackend::new(|req| {
+        if req.agent.starts_with("judge:") {
+            return Ok(r#"{
+                "answers": {"urgent": false},
+                "rationale": {"urgent": "no deadline"},
+                "rulings": [{"question": "urgent", "text": "no deadline → not urgent"}],
+                "facts": []
+            }"#
+            .to_string());
+        }
+        Ok(r#"{"urgent": true}"#.to_string())
+    });
+    let mut c = cfg(&dir, &["mock:a"], "mock:j");
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(c, backend);
+    let (resp, _) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(resp.decided_by, hungjury::response::DecidedBy::Judge);
+
+    let store = Store::open(&dir.path().join("memory.db")).unwrap();
+    let rs = store.rulings("support.urgent", 10).unwrap();
+    assert_eq!(rs.len(), 1);
+    assert_eq!(rs[0].status, Status::Active); // provisional ≠ contested
+    assert!((rs[0].trust - 0.4).abs() < 1e-9); // provisional, not 0.8
+}
+
+/// A ruling's `supersedes` id retires the older ruling it names.
+#[tokio::test]
+async fn judge_supersedes_retires_old_ruling() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("memory.db");
+    let store = Store::open(&db).unwrap();
+    let old = ruling(&store, "support.dept", "outdated: refunds → technical");
+    let prefix = old[..8].to_string();
+    drop(store);
+
+    let req = Request::from_json(
+        r#"{
+            "state": "refund please",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "i", "criteria": {"billing": "m", "technical": "t"}}
+            }
+        }"#,
+    )
+    .unwrap();
+    // 1-1 split → hung → judge runs and sees the old ruling's [id:] tag.
+    let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(
+        c,
+        MockBackend::new(move |req| {
+            if req.agent.starts_with("judge:") {
+                return Ok(format!(
+                    r#"{{"answers": {{"dept": "billing"}},
+                        "rationale": {{"dept": "money"}},
+                        "rulings": [{{"question": "dept", "text": "refunds → billing",
+                                      "supersedes": "{prefix}"}}],
+                        "facts": []}}"#
+                ));
+            }
+            Ok(if req.agent.contains("mock:a") {
+                r#"{"dept": "billing"}"#.to_string()
+            } else {
+                r#"{"dept": "technical"}"#.to_string()
+            })
+        }),
+    );
+    let (_resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 0);
+
+    let store = Store::open(&db).unwrap();
+    let old_e = store.get(&old).unwrap().unwrap();
+    assert_eq!(old_e.status, Status::Superseded);
+    assert!(old_e.superseded_by.is_some());
+    let active = store.rulings("support.dept", 10).unwrap();
+    assert_eq!(active.len(), 1);
+    assert!(active[0].text.contains("refunds"));
+}
+
+/// Human feedback matching the judge's verdict promotes provisional
+/// rulings on that scope to full judge trust.
+#[tokio::test]
+async fn feedback_confirmation_promotes_provisional_rulings() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "x",
+            "questions": {
+                "urgent": {"type": "noul", "id": "support.urgent", "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|req| {
+        if req.agent.starts_with("judge:") {
+            return Ok(r#"{
+                "answers": {"urgent": true},
+                "rationale": {"urgent": "deadline"},
+                "rulings": [{"question": "urgent", "text": "deadline → urgent"}],
+                "facts": []
+            }"#
+            .to_string());
+        }
+        let v = req.agent.contains("mock:a");
+        Ok(format!(r#"{{"urgent": {v}}}"#))
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(c, backend);
+    let (resp, _) = decide(&ctx, &req).await.unwrap();
+
+    let store = Store::open(&dir.path().join("memory.db")).unwrap();
+    let r = store.rulings("support.urgent", 10).unwrap();
+    assert_eq!(r.len(), 1);
+    assert!((r[0].trust - 0.4).abs() < 1e-9); // provisional
+
+    // Human agrees with the judge verdict (urgent=true) → promote.
+    learn::feedback(&ctx, &resp.id, &[("urgent".into(), "true".into())], None).unwrap();
+    let r = store.rulings("support.urgent", 10).unwrap();
+    assert!((r[0].trust - 0.8).abs() < 1e-9);
+}
+
+/// `expire_rulings_before` stales old rulings; precedents untouched.
+#[test]
+fn ruling_ttl_expires_old_entries() {
+    let store = Store::open_memory().unwrap();
+    let rid = ruling(&store, "q1", "old rule");
+    let pid = precedent(&store, "q1", "d1", "technical");
+    assert_eq!(store.expire_rulings(0).unwrap(), 0); // disabled
+    let n = store.expire_rulings_before("2999-01-01T00:00:00Z").unwrap();
+    assert_eq!(n, 1);
+    assert_eq!(store.get(&rid).unwrap().unwrap().status, Status::Stale);
+    assert_eq!(store.get(&pid).unwrap().unwrap().status, Status::Active);
+}
+
+/// `id_by_prefix` resolves a unique 8-char tag; ambiguous → None.
+#[test]
+fn id_prefix_resolution() {
+    let store = Store::open_memory().unwrap();
+    let id = ruling(&store, "q1", "some rule");
+    assert_eq!(store.id_by_prefix(&id[..8]).unwrap(), Some(id));
+    assert_eq!(store.id_by_prefix("zzzzzzzz").unwrap(), None);
+    assert_eq!(store.id_by_prefix("").unwrap(), None); // 0 or >1 rows
+}
+
+/// `batch` decides a JSONL file in parallel and echoes `case` labels.
+#[tokio::test]
+async fn batch_decides_and_echoes_case_labels() {
+    let dir = tempfile::tempdir().unwrap();
+    let cases = dir.path().join("cases.jsonl");
+    std::fs::write(
+        &cases,
+        concat!(
+            r#"{"case": "a", "state": "s1", "questions": {"q": {"type": "choice", "id": "k.q", "instructions": "i", "criteria": {"x": "1", "y": "2"}}}}"#,
+            "\n",
+            r#"{"case": "b", "state": "s2", "questions": {"q": {"type": "choice", "id": "k.q", "instructions": "i", "criteria": {"x": "1", "y": "2"}}}}"#,
+            "\n",
+        ),
+    )
+    .unwrap();
+    let out = dir.path().join("out.jsonl");
+    let backend = MockBackend::new(|_| Ok(r#"{"q": "x"}"#.to_string()));
+    let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out)).await.unwrap();
+    assert_eq!(code, 0);
+    let lines: Vec<serde_json::Value> = std::fs::read_to_string(&out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["case"], "a");
+    assert_eq!(lines[1]["case"], "b");
+    assert_eq!(lines[0]["decided_by"], "jury");
+}

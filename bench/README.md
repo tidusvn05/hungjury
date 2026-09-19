@@ -51,7 +51,10 @@ LABEL=adversarial-hung REPORT=report_hung.json \
   bench/run_bench.sh adversarial --hung-threshold 0.8
 ```
 
-### Multi-seed + summary
+### Multi-seed + summary (the recommended default)
+
+Single runs carry ±5–8 pts of noise at n=90 decided questions — run at
+least 3 seeds before trusting a swing smaller than that:
 
 ```bash
 for s in 42 7 1337; do SEED=$s REPORT=report_s$s.json bench/run_bench.sh pr_review; done
@@ -61,8 +64,20 @@ python3 bench/summarize.py            # mean±stdev per arm, grouped by label
 ### Hung-rate coverage
 
 3 jurors + `--hung-threshold 0.5` almost never hangs (a 2–1 split decides).
-`--hung-threshold 0.8` forces escalation on low-confidence majorities —
-use the `adversarial-hung` variant above to exercise the judge path.
+Two ways to exercise escalation + memory-write on hung keys:
+
+```bash
+# Higher threshold: low-confidence majorities escalate too.
+LABEL=adversarial-hung REPORT=report_hung.json BENCH_HOME=$PWD/bench/adversarial/home_hung \
+  bench/run_bench.sh adversarial --hung-threshold 0.8
+
+# Even juror count: a 1–1 (or 2–2) split hangs at any threshold.
+LABEL=adversarial-2j REPORT=report_2j.json BENCH_HOME=$PWD/bench/adversarial/home_2j \
+  bench/run_bench.sh adversarial --jurors claude:haiku,codex:gpt-5.6-terra@low
+```
+
+(Use a fresh `BENCH_HOME` per variant so trained memory can't leak
+between runs.)
 
 ## Reports
 

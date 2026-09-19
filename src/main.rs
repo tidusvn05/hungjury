@@ -52,6 +52,9 @@ struct Global {
     /// Confidence below this marks a question hung.
     #[arg(long, global = true)]
     hung_threshold: Option<f64>,
+    /// Minimum valid ballots per question — fewer ⇒ hung (default 2).
+    #[arg(long, global = true)]
+    min_quorum: Option<usize>,
     /// Disable memory entirely.
     #[arg(long, global = true)]
     no_memory: bool,
@@ -216,6 +219,8 @@ enum MemoryCmd {
         #[arg(long, default_value = "20")]
         last: usize,
     },
+    /// List contested entries awaiting human review (with bodies).
+    Review,
     /// Resolve a contested entry: --accept reactivates, --reject tombstones.
     Resolve {
         /// Entry id.
@@ -321,7 +326,16 @@ async fn dispatch(
             Ok(0)
         }
         Cmd::Learn(args) => {
-            let (_cfg, ctx) = load_ctx(over, cfg_path)?;
+            let (cfg, ctx) = load_ctx(over, cfg_path)?;
+            if cfg.memory.ruling_ttl_days > 0
+                && let Some(store) = &ctx.store
+            {
+                match store.expire_rulings(cfg.memory.ruling_ttl_days) {
+                    Ok(0) => {}
+                    Ok(n) => eprintln!("learn: {n} rulings expired (ttl {}d)", cfg.memory.ruling_ttl_days),
+                    Err(e) => eprintln!("learn: ruling expiry failed: {e}"),
+                }
+            }
             let queue = args.queue || (args.audit.is_none() && !args.consolidate);
             if queue {
                 learn::learn_queue(&ctx, args.dry_run).await?;
@@ -496,6 +510,22 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
                 );
             }
         }
+        MemoryCmd::Review => {
+            let contested = store
+                .list(None, None, false)?
+                .into_iter()
+                .filter(|e| e.status == hungjury::memory::store::Status::Contested)
+                .collect::<Vec<_>>();
+            if contested.is_empty() {
+                eprintln!("review: no contested entries");
+            } else {
+                eprintln!(
+                    "review: {} contested entries — `memory resolve <id> --accept|--reject`",
+                    contested.len()
+                );
+            }
+            print_entries(&contested);
+        }
         MemoryCmd::Resolve { id, accept, reject: _ } => {
             if store.get(&id)?.is_none() {
                 eprintln!("no entry '{id}'");
@@ -533,6 +563,9 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
                 })).collect::<Vec<_>>(),
                 "decisions": store.decisions_len()?,
                 "queue_pending": store.queue_len()?,
+                "cache_entries": hungjury::cache::Cache::new(
+                    &cfg.data_dir, cfg.no_cache, cfg.refresh,
+                ).len(),
                 "calls_today": quota.today_count().await,
                 "daily_cap": cfg.limits.daily_cap,
                 "juror_stats": stats.iter().map(|(j, q, n, a)| serde_json::json!({
@@ -606,6 +639,7 @@ fn overrides(g: &Global) -> CliOverrides {
         judge: g.judge.clone(),
         escalate: g.escalate,
         hung_threshold: g.hung_threshold,
+        min_quorum: g.min_quorum,
         no_memory: g.no_memory,
         memory_readonly: g.memory_readonly,
         explain: g.explain,

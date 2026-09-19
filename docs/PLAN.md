@@ -543,3 +543,33 @@ quan sát cần thiết để dùng thật:
   by_source + queue + quota + juror stats.
 - Ordering ổn định: `list_decisions`/`recent_jury_decisions` dùng
   `created_at DESC, rowid DESC`.
+
+### Đợt tin cậy hoá (2026-09-19) — quorum, provisional rulings, supersedes
+
+Rà soát sau benchmark lộ thêm các failure mode âm thầm; đợt này đóng
+chúng:
+
+- **`min_quorum` (mặc định 2)**: trước đây `n<2` ballots ⇒
+  `confidence=None` ⇒ "never hung" ⇒ một juror sống sót (2/3 timeout)
+  quyết thầm lặng cả câu hỏi. Giờ `votes < min_quorum` ⇒ hung ⇒
+  escalation/human. `decided_ballot`/`feedback` coi `confidence=None`
+  là *không decided* — judge override trên key quorum-fail không bị
+  contested (đó là escalation đúng nghĩa). `min_quorum` nằm trong cache
+  key.
+- **Provisional rulings** (`memory.provisional_trust`, mặc định 0.4):
+  rulings từ hung-key escalation ghi trust thấp — vẫn active nhưng hiển
+  thị `(trust 0.4)` và xếp dưới rulings đã xác nhận. `feedback` khớp
+  judge verdict hoặc `learn --audit` thấy judge lặp lại verdict cũ ⇒
+  `promote_rulings` nâng lên `Source::Judge.base_trust()`.
+- **`supersedes`**: ruling lines trong prompt có `[id:<8>]`; schema
+  judge chấp nhận `supersedes` → `commit_judge` resolve prefix → old →
+  `superseded` (chỉ khi ruling mới active, không contested).
+- **`memory review`**: list contested + hint resolve.
+- **`memory.ruling_ttl_days`** (mặc định 0): `expire_rulings` chạy đầu
+  mỗi `learn` — rulings active quá N ngày → `stale`.
+- **`[costs]`**: backend → USD/call; `usage.est_cost_usd` + eval arm
+  `est_cost_usd`.
+- **`cache_entries`** trong `memory stats`.
+- **SDK**: `sdk/python/hungjury.py` (`system_one`/`feedback`).
+- Prompt: header memory block nhắc excerpts là data; judge.md hướng dẫn
+  `supersedes`.

@@ -142,6 +142,7 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
                     &juror_ballots,
                     &resp.answers,
                     ctx.config.hung_threshold,
+                    ctx.config.memory.provisional_trust,
                     repo_id.as_deref(),
                     ws_path.as_deref(),
                     &ctx.config.judge,
@@ -221,6 +222,7 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                     &juror_ballots,
                     &resp.answers,
                     ctx.config.hung_threshold,
+                    ctx.config.memory.provisional_trust,
                     repo_id.as_deref(),
                     ws_path.as_deref(),
                     &ctx.config.judge,
@@ -234,6 +236,21 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                 {
                     if let Some(q) = req.questions.get(&key) {
                         demote_judge_entries(store, &q.qid());
+                    }
+                }
+                // Re-confirmation: the judge repeating its earlier verdict on
+                // an escalated key promotes that scope's provisional rulings.
+                for (key, j) in &call.judged {
+                    let confirmed = resp
+                        .answers
+                        .get(key)
+                        .and_then(judge_verdict_ballot)
+                        .is_some_and(|prev| prev == j.ballot);
+                    if confirmed && let Some(q) = req.questions.get(key) {
+                        let _ = store.promote_rulings(
+                            &crate::memory::store::q_scope(&q.qid()),
+                            Source::Judge.base_trust(),
+                        );
                     }
                 }
                 if keys.is_empty() {
@@ -398,6 +415,23 @@ fn question_desc(first: Option<&crate::memory::store::Entry>) -> String {
         .to_string()
 }
 
+/// The judge's recorded verdict on an answer, as a `Ballot` — `None` when
+/// the key was never escalated (pure jury answer).
+fn judge_verdict_ballot(a: &AnswerOut) -> Option<Ballot> {
+    let jv = match a {
+        AnswerOut::Choice { judge, .. }
+        | AnswerOut::Score { judge, .. }
+        | AnswerOut::Noul { judge, .. } => judge.as_ref()?,
+    };
+    if let Some(c) = &jv.choice {
+        Some(Ballot::Choice(c.clone()))
+    } else if let Some(s) = jv.score {
+        Some(Ballot::Score(s.max(0) as usize))
+    } else {
+        jv.noul.map(Ballot::Noul)
+    }
+}
+
 /// Does `ballot` contradict the aggregated `answer`? Mirrors
 /// `disagreed_keys` for a single key.
 fn contradicts(answer: Option<&AnswerOut>, ballot: &Ballot) -> bool {
@@ -459,12 +493,25 @@ pub fn feedback(
         let ballot = q.validate_answer(key, &val)?;
 
         // Human contradicts a decided answer → judge lessons on this
-        // scope are suspect; demote them to contested.
+        // scope are suspect; demote them to contested. "Decided" = the key
+        // isn't still hung (unresolved hangs keep the key in `resp.hung`
+        // under escalate=off/queue — nobody committed a verdict there).
         let stored = resp.answers.get(key);
-        let decided = stored
-            .is_some_and(|a| !crate::jury::vote::is_hung(a, ctx.config.hung_threshold));
+        let decided = stored.is_some() && !resp.hung.contains(key);
         if decided && contradicts(stored, &ballot) {
             demoted += demote_judge_entries(store, &q.qid());
+        }
+
+        // Human confirms the judge's earlier verdict on an escalated key →
+        // promote that scope's provisional rulings to full judge trust.
+        let confirmed = stored
+            .and_then(judge_verdict_ballot)
+            .is_some_and(|jv| jv == ballot);
+        if confirmed {
+            let _ = store.promote_rulings(
+                &crate::memory::store::q_scope(&q.qid()),
+                Source::Judge.base_trust(),
+            );
         }
 
         let e = NewEntry {

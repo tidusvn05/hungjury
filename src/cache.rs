@@ -66,6 +66,23 @@ impl Cache {
         hex::encode(h.finalize())
     }
 
+    /// Number of cached decision files (for `memory stats`).
+    pub fn len(&self) -> usize {
+        std::fs::read_dir(&self.dir)
+            .map(|it| {
+                it.filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.path().extension().is_some_and(|x| x == "json")
+                    })
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Look up a cached decision.
     pub fn get(&self, key: &str) -> Option<CacheEntry> {
         if self.disabled || self.no_read {

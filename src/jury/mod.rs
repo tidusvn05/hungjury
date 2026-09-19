@@ -127,6 +127,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         "samples": ctx.config.samples,
         "judge": ctx.config.judge,
         "threshold": ctx.config.hung_threshold,
+        "min_quorum": ctx.config.min_quorum,
         "tools": workspace_mode,
         "explain": ctx.config.explain,
         "memory": ctx.config.memory.enabled,
@@ -237,7 +238,12 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
             }
         }
         let out = vote::tally(q, &votes);
-        if vote::is_hung(&out, ctx.config.hung_threshold) {
+        // Below quorum (too few valid ballots — e.g. jurors timed out) the
+        // question is hung even though `confidence` is `None`: a lone
+        // surviving juror must not silently decide.
+        if votes.len() < ctx.config.min_quorum
+            || vote::is_hung(&out, ctx.config.hung_threshold)
+        {
             hung.push(key.clone());
         }
         answers.insert(key.clone(), out);
@@ -279,6 +285,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                             &juror_ballots,
                             &answers,
                             ctx.config.hung_threshold,
+                            ctx.config.memory.provisional_trust,
                             repo_id.as_deref(),
                             ws_path.as_deref(),
                             &ctx.config.judge,
@@ -310,7 +317,8 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         usage: Usage {
             wall_ms: started.elapsed().as_millis() as u64,
             jurors: runs.iter().map(juror_usage).collect(),
-            judge: judge_usage,
+            judge: judge_usage.clone(),
+            est_cost_usd: est_cost(ctx, &runs, judge_usage.as_ref()),
         },
     };
     if let Some(store) = &ctx.store
@@ -336,6 +344,33 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         }
     let code = response.exit_code();
     Ok((response, code))
+}
+
+/// Estimated USD cost of this decision from `[costs]` — `None` unless at
+/// least one backend has a configured price.
+fn est_cost(
+    ctx: &DecideCtx,
+    runs: &[juror::JurorRun],
+    judge: Option<&JudgeUsage>,
+) -> Option<f64> {
+    if ctx.config.costs.is_empty() {
+        return None;
+    }
+    let mut total = 0.0;
+    let mut any = false;
+    for r in runs {
+        if let Some(p) = ctx.config.cost_per_call(&r.juror) {
+            total += p * (1.0 + r.retries as f64);
+            any = true;
+        }
+    }
+    if let Some(j) = judge
+        && let Some(p) = ctx.config.cost_per_call(&j.model)
+    {
+        total += p;
+        any = true;
+    }
+    any.then_some(total)
 }
 
 fn decided_by_str(d: DecidedBy) -> &'static str {

@@ -77,6 +77,12 @@ pub struct MemoryConfig {
     pub memory_char_cap: usize,
     /// Keep the last juror memory-blind as an independent control vote.
     pub blind_juror: bool,
+    /// Trust given to rulings distilled from a hung-key escalation —
+    /// provisional until a later judge/human re-confirms them.
+    pub provisional_trust: f64,
+    /// Age in days after which an active ruling goes `stale` when `learn`
+    /// runs. `0` disables expiry.
+    pub ruling_ttl_days: u32,
 }
 
 impl Default for MemoryConfig {
@@ -88,6 +94,8 @@ impl Default for MemoryConfig {
             max_rulings: 8,
             memory_char_cap: 4000,
             blind_juror: false,
+            provisional_trust: 0.4,
+            ruling_ttl_days: 0,
         }
     }
 }
@@ -106,6 +114,9 @@ pub struct Config {
     pub escalate: Escalate,
     /// Confidence below this ⇒ the question is hung.
     pub hung_threshold: f64,
+    /// Fewer valid ballots than this ⇒ hung (a lone surviving juror must
+    /// not silently decide). Default 2.
+    pub min_quorum: usize,
     /// `--explain`: jurors add a short `_why` per answer.
     pub explain: bool,
     /// `--no-cache`.
@@ -124,6 +135,9 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// Memory db path (default `<data_dir>/memory.db`).
     pub memory_db: PathBuf,
+    /// Estimated USD per CLI call, keyed by backend name
+    /// (`claude`/`codex`/`devin`). Empty ⇒ no cost estimate.
+    pub costs: std::collections::BTreeMap<String, f64>,
     /// Limits.
     pub limits: LimitsConfig,
     /// Memory tuning.
@@ -141,12 +155,14 @@ impl Default for Config {
             judge: String::new(),
             escalate: Escalate::Sync,
             hung_threshold: 0.5,
+            min_quorum: 2,
             explain: false,
             no_cache: false,
             refresh: false,
             prompts_dir: None,
             policy_file: None,
             policy: None,
+            costs: std::collections::BTreeMap::new(),
             memory_db: data_dir.join("memory.db"),
             data_dir,
             limits: LimitsConfig::default(),
@@ -176,8 +192,11 @@ struct TomlConfig {
     judge: Option<String>,
     escalate: Option<Escalate>,
     hung_threshold: Option<f64>,
+    min_quorum: Option<usize>,
     prompts_dir: Option<PathBuf>,
     policy_file: Option<PathBuf>,
+    /// `[costs]` — backend name → USD per call.
+    costs: Option<std::collections::BTreeMap<String, f64>>,
     limits: Option<LimitsPartial>,
     memory: Option<MemoryPartial>,
     /// Named profiles selectable via `--profile <name>`.
@@ -203,6 +222,8 @@ struct MemoryPartial {
     max_rulings: Option<usize>,
     memory_char_cap: Option<usize>,
     blind_juror: Option<bool>,
+    provisional_trust: Option<f64>,
+    ruling_ttl_days: Option<u32>,
 }
 
 /// CLI-supplied overrides (already flattened from clap args).
@@ -218,6 +239,8 @@ pub struct CliOverrides {
     pub escalate: Option<Escalate>,
     /// `--hung-threshold x`
     pub hung_threshold: Option<f64>,
+    /// `--min-quorum n`
+    pub min_quorum: Option<usize>,
     /// `--no-memory`
     pub no_memory: bool,
     /// `--memory-readonly`
@@ -300,6 +323,9 @@ impl Config {
         if let Some(t) = cli.hung_threshold {
             cfg.hung_threshold = t;
         }
+        if let Some(q) = cli.min_quorum {
+            cfg.min_quorum = q.max(1);
+        }
         if cli.no_memory {
             cfg.memory.enabled = false;
         }
@@ -377,6 +403,12 @@ impl Config {
         if let Some(v) = t.hung_threshold {
             self.hung_threshold = v;
         }
+        if let Some(v) = t.min_quorum {
+            self.min_quorum = v.max(1);
+        }
+        if let Some(v) = &t.costs {
+            self.costs = v.clone();
+        }
         if let Some(v) = &t.prompts_dir {
             self.prompts_dir = Some(v.clone());
         }
@@ -419,6 +451,12 @@ impl Config {
             if let Some(v) = m.blind_juror {
                 self.memory.blind_juror = v;
             }
+            if let Some(v) = m.provisional_trust {
+                self.memory.provisional_trust = v.clamp(0.0, 1.0);
+            }
+            if let Some(v) = m.ruling_ttl_days {
+                self.memory.ruling_ttl_days = v;
+            }
         }
     }
 
@@ -440,6 +478,13 @@ impl Config {
     /// Judge call timeout.
     pub fn judge_timeout(&self) -> Duration {
         Duration::from_secs(self.limits.judge_timeout_secs)
+    }
+
+    /// Configured USD price of one call to this agent string's backend —
+    /// `None` when `[costs]` has no entry for it.
+    pub fn cost_per_call(&self, agent: &str) -> Option<f64> {
+        let backend = agent.split(':').next().unwrap_or(agent);
+        self.costs.get(backend).copied()
     }
 }
 
@@ -553,6 +598,33 @@ top_k = 1
         assert!((cfg.hung_threshold - 0.7).abs() < 1e-9);
         assert_eq!(cfg.limits.daily_cap, 5);
         assert_eq!(cfg.memory.top_k, 1);
+    }
+
+    #[test]
+    fn toml_quorum_costs_and_memory_tuning() {
+        let dir = tempfile::tempdir().unwrap();
+        let toml_path = dir.path().join("hungjury.toml");
+        std::fs::write(
+            &toml_path,
+            r#"
+jurors = ["mock:a", "mock:b"]
+judge = "mock:j"
+min_quorum = 3
+[costs]
+claude = 0.08
+codex = 0.05
+[memory]
+provisional_trust = 0.3
+ruling_ttl_days = 90
+"#,
+        )
+        .unwrap();
+        let cfg = Config::load(&CliOverrides::default(), Some(&toml_path)).unwrap();
+        assert_eq!(cfg.min_quorum, 3);
+        assert_eq!(cfg.cost_per_call("claude:opus@high"), Some(0.08));
+        assert_eq!(cfg.cost_per_call("devin:x"), None);
+        assert!((cfg.memory.provisional_trust - 0.3).abs() < 1e-9);
+        assert_eq!(cfg.memory.ruling_ttl_days, 90);
     }
 
     #[test]

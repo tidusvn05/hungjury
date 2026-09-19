@@ -43,6 +43,15 @@ pub fn new_decision_id() -> String {
     format!("dec_{}", &hex::encode(h.finalize())[..24])
 }
 
+/// RFC3339 UTC for a unix-seconds timestamp (used for TTL cutoffs —
+/// `created_at` strings compare lexicographically).
+pub fn rfc3339_at(unix_secs: i64) -> String {
+    time::OffsetDateTime::from_unix_timestamp(unix_secs)
+        .ok()
+        .and_then(|t| t.format(&time::format_description::well_known::Rfc3339).ok())
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string())
+}
+
 /// Random nonce for the state wrapper tag (6 hex chars), seeded from time +
 /// pid — not cryptographic, just unpredictable to the state author.
 pub fn nonce() -> String {

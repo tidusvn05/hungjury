@@ -113,6 +113,8 @@ struct ArmStats {
     calls: usize,
     /// Calls split by backend (`claude`/`codex`/`devin`).
     calls_by_backend: BTreeMap<String, usize>,
+    /// Estimated USD spent (needs `[costs]` config).
+    est_cost_usd: f64,
     /// Per-case decision wall ms (for mean/p95).
     #[serde(skip)]
     walls: Vec<u64>,
@@ -175,6 +177,9 @@ fn score_response(
     expected: &BTreeMap<String, serde_json::Value>,
 ) {
     stats.walls.push(resp.usage.wall_ms);
+    if let Some(c) = resp.usage.est_cost_usd {
+        stats.est_cost_usd += c;
+    }
     for j in &resp.usage.jurors {
         note_calls(stats, &j.juror, 1 + j.retries as usize);
     }
@@ -499,6 +504,7 @@ pub async fn run(
             "judge": report_cfg.judge,
             "samples": report_cfg.samples,
             "hung_threshold": report_cfg.hung_threshold,
+            "min_quorum": report_cfg.min_quorum,
             "escalate": format!("{:?}", report_cfg.escalate),
         },
         "arms": {
@@ -543,6 +549,7 @@ fn arm_json(s: &ArmStats) -> serde_json::Value {
         "hung_rate": s.hung_rate(),
         "calls": s.calls,
         "calls_by_backend": s.calls_by_backend,
+        "est_cost_usd": s.est_cost_usd,
         "wall_ms_mean": mean,
         "wall_ms_p95": p95,
         "mismatches": s.mismatches,
@@ -657,6 +664,7 @@ mod tests {
                     wrote: vec![],
                     error: None,
                 }),
+                est_cost_usd: None,
             },
         };
         let mut stats = ArmStats::default();

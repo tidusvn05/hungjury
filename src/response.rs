@@ -163,6 +163,9 @@ pub struct Usage {
     /// Judge call, when escalation ran.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub judge: Option<JudgeUsage>,
+    /// Estimated USD for this decision (needs `[costs]` in config).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub est_cost_usd: Option<f64>,
 }
 
 /// The top-level response printed to stdout.
