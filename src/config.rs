@@ -114,6 +114,12 @@ pub struct Config {
     pub refresh: bool,
     /// Prompt-override directory (falls back to embedded templates).
     pub prompts_dir: Option<PathBuf>,
+    /// `--policy-file` path (TOML `policy_file`); domain rules injected
+    /// into juror + judge prompts.
+    pub policy_file: Option<PathBuf>,
+    /// Resolved policy text (loaded from `policy_file` once at `load`).
+    #[serde(skip_serializing)]
+    pub policy: Option<String>,
     /// Data dir (memory.db, cache/, calls.jsonl, state.json).
     pub data_dir: PathBuf,
     /// Memory db path (default `<data_dir>/memory.db`).
@@ -139,6 +145,8 @@ impl Default for Config {
             no_cache: false,
             refresh: false,
             prompts_dir: None,
+            policy_file: None,
+            policy: None,
             memory_db: data_dir.join("memory.db"),
             data_dir,
             limits: LimitsConfig::default(),
@@ -169,6 +177,7 @@ struct TomlConfig {
     escalate: Option<Escalate>,
     hung_threshold: Option<f64>,
     prompts_dir: Option<PathBuf>,
+    policy_file: Option<PathBuf>,
     limits: Option<LimitsPartial>,
     memory: Option<MemoryPartial>,
     /// Named profiles selectable via `--profile <name>`.
@@ -221,6 +230,8 @@ pub struct CliOverrides {
     pub refresh: bool,
     /// `--prompts-dir`
     pub prompts_dir: Option<PathBuf>,
+    /// `--policy-file`
+    pub policy_file: Option<PathBuf>,
     /// `--memory-db`
     pub memory_db: Option<PathBuf>,
     /// `--profile`
@@ -301,8 +312,19 @@ impl Config {
         if let Some(p) = &cli.prompts_dir {
             cfg.prompts_dir = Some(p.clone());
         }
+        if let Some(p) = &cli.policy_file {
+            cfg.policy_file = Some(p.clone());
+        }
         if let Some(p) = &cli.memory_db {
             cfg.memory_db = p.clone();
+        }
+
+        // Resolve the domain policy text once — injected into juror and
+        // judge prompts as `{{policy_block}}`.
+        if let Some(p) = &cfg.policy_file {
+            let text = std::fs::read_to_string(p).map_err(|e| Error::io(p, e))?;
+            let text = text.trim().to_string();
+            cfg.policy = (!text.is_empty()).then_some(text);
         }
 
         // Auto-detect: each CLI on PATH contributes its default juror; the
@@ -357,6 +379,9 @@ impl Config {
         }
         if let Some(v) = &t.prompts_dir {
             self.prompts_dir = Some(v.clone());
+        }
+        if let Some(v) = &t.policy_file {
+            self.policy_file = Some(v.clone());
         }
         if let Some(l) = &t.limits {
             if let Some(v) = l.juror_timeout_secs {

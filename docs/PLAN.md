@@ -515,3 +515,31 @@ Benchmark 7 domain (`docs/BENCHMARK.md`) cho thấy rulings của judge làm
   như production), `mismatches` (≤20), `calls_by_backend`, echo `config`.
 - `bench/run_bench.sh`: env overrides `SEED`/`REPORT`/`LABEL`/`BENCH_HOME`;
   `bench/summarize.py` gộp `report*.json` theo label, mean±stdev đa-seed.
+
+### Đợt vận hành hoá (2026-09-19) — chống memory-poisoning + ops commands
+
+Tiếp nối guard contested-on-override, bổ sung các đường sửa lỗi và
+quan sát cần thiết để dùng thật:
+
+- **Audit toàn diện**: `learn --audit` giờ re-judge *mọi* key của câu hỏi
+  (trước chỉ re-judge `resp.hung` → quyết định jury-decided không bao giờ
+  được so sánh). `--recent N` audit N quyết định mới nhất
+  (`created_at DESC, rowid DESC`) thay vì sample ngẫu nhiên. Khi judge
+  phủ định jury đã quyết, rulings/precedents `source=judge` trên scope
+  đó bị demote → `contested` qua `demote_judge_entries`.
+- **Feedback demote**: `hungjury feedback` khi người sửa đáp án trên một
+  jury đã quyết cũng demote judge knowledge tương ứng (human precedent
+  vẫn ghi `active`, trust cao).
+- **`--policy-file` / `policy_file`**: inject rubric domain vào prompt
+  juror *và* judge (`{{policy_block}}`); hash policy vào cache key nên
+  đổi policy tự invalidate cache. Dùng để align judge với labeling
+  policy thay vì để nó theo rubric riêng.
+- **`hungjury batch <cases.jsonl>`**: decide song song
+  (`limits.max_concurrency`), echo `case` label từ input, output JSONL
+  `{case,id,answers,decided_by,hung,exit}`, exit 1 nếu có case lỗi.
+- **Ops**: `memory decisions --last N` (id, thời điểm, decided_by, hung,
+  answers rút gọn), `memory resolve --accept|--reject` (contested →
+  active/forgotten), `memory list --status`, `memory stats` thêm
+  by_source + queue + quota + juror stats.
+- Ordering ổn định: `list_decisions`/`recent_jury_decisions` dùng
+  `created_at DESC, rowid DESC`.

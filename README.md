@@ -115,6 +115,28 @@ hungjury decide -q pr-questions.json --workspace ./my-repo --hint "Xem diff củ
 
 Các lệnh khác: `hungjury feedback` (người sửa đáp án), `hungjury learn` (model cao chấm lại ngoài luồng), `hungjury eval` (đo accuracy/latency theo từng cấu hình), `hungjury memory search|show|forget|export|import|merge`, `hungjury doctor`.
 
+### Vận hành hằng ngày
+
+```bash
+# Chạy nhiều case một lần (song song theo limits.max_concurrency)
+hungjury batch cases.jsonl --out results.jsonl
+
+# Gắn rubric/policy của domain vào cả juror lẫn judge (đổi policy ⇒ cache tự invalidate)
+hungjury --policy-file triage-policy.md decide req.json
+
+# Kiểm tra memory và lịch sử quyết định
+hungjury memory list --kind ruling --all          # mọi status, kể cả contested
+hungjury memory decisions --last 20               # quyết định gần nhất + ai quyết
+hungjury memory stats                             # entries, nguồn, quota, juror stats
+hungjury memory resolve <entry-id> --accept       # contested → active (--reject → forgotten)
+
+# Học ngoài luồng: judge chấm lại các quyết định gần nhất thay vì chỉ hàng hung
+hungjury learn --audit --recent 20
+hungjury feedback <decision-id> --set dept=technical --note "label sai"
+```
+
+Khi người hoặc audit phủ định một quyết định jury đã *decided* (không hung), các ruling/precedent do judge ghi cho câu hỏi đó bị đánh `contested` — vẫn xem được bằng `memory list --all`, không còn được inject vào prompt. Đây là guard chống memory lan truyền lỗi của judge (xem `docs/BENCHMARK.md`).
+
 SDK Python/TypeScript (giữ hình dạng `system_one(state, questions)`) sẽ là lớp bọc mỏng gọi binary — làm sau.
 
 ## Thiết kế

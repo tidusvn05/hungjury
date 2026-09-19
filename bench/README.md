@@ -71,3 +71,16 @@ use the `adversarial-hung` variant above to exercise the judge path.
 and a `config` echo. Arms: `jury`, `jury_memory`, `judge` (cold — answers
 blind), `judge_informed` (sees juror ballots + answers, like production
 escalation).
+
+### Policy alignment
+
+Labels encode a *policy*; when the judge applies a different rubric its
+rulings hurt `jury_memory` (see `docs/BENCHMARK.md`). Inject the domain
+rubric into juror and judge prompts to measure the aligned ceiling:
+
+```bash
+SEED=42 REPORT=report_policy.json \
+  bench/run_bench.sh pr_review --policy-file bench/pr_review/policy.md
+```
+
+Changing the policy file changes the cache key, so no stale decisions.

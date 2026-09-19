@@ -198,6 +198,20 @@ impl Status {
     }
 }
 
+/// A stored `decisions` row (parsed `request`/`response` JSON).
+pub struct DecisionRow {
+    /// `dec_…` id.
+    pub id: String,
+    /// RFC3339 timestamp.
+    pub created_at: String,
+    /// `jury` | `judge` | `cache`.
+    pub decided_by: String,
+    /// The original request JSON.
+    pub request: serde_json::Value,
+    /// The stored response JSON.
+    pub response: serde_json::Value,
+}
+
 /// An entry as stored.
 #[derive(Debug, Clone)]
 pub struct Entry {
@@ -682,6 +696,61 @@ impl Store {
         })
     }
 
+    /// `n` most recent jury-decided decisions (for `learn --audit --recent`).
+    pub fn recent_jury_decisions(&self, n: usize) -> Result<Vec<String>> {
+        self.with_conn(|c| {
+            let mut st = c
+                .prepare(
+                    "SELECT id FROM decisions WHERE decided_by = 'jury'
+                     ORDER BY created_at DESC, rowid DESC LIMIT ?1",
+                )
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let rows = st
+                .query_map([n as i64], |r| r.get::<_, String>(0))
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| Error::Memory(e.to_string()))
+        })
+    }
+
+    /// Recent decisions, newest first.
+    pub fn list_decisions(&self, limit: usize) -> Result<Vec<DecisionRow>> {
+        self.with_conn(|c| {
+            let mut st = c
+                .prepare(
+                    "SELECT id, created_at, decided_by, request, response FROM decisions
+                     ORDER BY created_at DESC, rowid DESC LIMIT ?1",
+                )
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let rows = st
+                .query_map([limit as i64], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                    ))
+                })
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| Error::Memory(e.to_string()))
+                .map(|v| {
+                    v.into_iter()
+                        .map(|(id, ts, by, req, resp)| DecisionRow {
+                            id,
+                            created_at: ts,
+                            decided_by: by,
+                            request: serde_json::from_str(&req)
+                                .unwrap_or(serde_json::Value::Null),
+                            response: serde_json::from_str(&resp)
+                                .unwrap_or(serde_json::Value::Null),
+                        })
+                        .collect()
+                })
+        })
+    }
+
     /// Enqueue a decision for offline learning.
     pub fn enqueue(&self, decision_id: &str, reason: &str) -> Result<()> {
         self.with_conn(|c| {
@@ -786,6 +855,20 @@ impl Store {
                         r.get::<_, i64>(2)?,
                     ))
                 })
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| Error::Memory(e.to_string()))
+        })
+    }
+
+    /// Entry counts grouped by source.
+    pub fn source_counts(&self) -> Result<Vec<(String, i64)>> {
+        self.with_conn(|c| {
+            let mut st = c
+                .prepare("SELECT source, count(*) FROM entries GROUP BY source")
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let rows = st
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
                 .map_err(|e| Error::Memory(e.to_string()))?;
             rows.collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|e| Error::Memory(e.to_string()))

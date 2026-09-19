@@ -3,7 +3,7 @@ state at the end of this prompt. Output ONLY a single JSON object — no
 prose, no markdown fences, nothing before or after the JSON.
 
 {{schema_block}}
-
+{{policy_block}}
 ## Questions
 
 {{questions_block}}

@@ -292,6 +292,7 @@ fn render_judge_prompt(
     let tmpl = ctx.prompts.load("judge.md")?;
     let mut vars: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
     vars.insert("schema_block", schema_block_text(schema));
+    vars.insert("policy_block", crate::jury::policy_block(ctx));
     vars.insert("questions_block", questions_render(req));
     vars.insert("memory_block", memory_block.to_string());
     vars.insert("workspace_block", workspace_render(req));

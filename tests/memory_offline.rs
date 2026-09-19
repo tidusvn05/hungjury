@@ -441,3 +441,143 @@ async fn consolidate_supersedes_old_rulings() {
     let all = store.list(Some(Kind::Ruling), None, false).unwrap();
     assert_eq!(all.iter().filter(|e| e.status == Status::Superseded).count(), 10);
 }
+
+/// `feedback` on a decided answer: agreement leaves rulings active;
+/// contradiction demotes judge-written rulings/precedents on the scope
+/// to contested (human + imported entries untouched).
+#[tokio::test]
+async fn feedback_contradiction_demotes_judge_rulings() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "charged twice, want a refund",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "which team", "criteria": {"billing": "m", "technical": "t"}}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|_| Ok(r#"{"dept": "billing"}"#.to_string()));
+    let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let (resp, _) = decide(&ctx, &req).await.unwrap();
+
+    let store = Store::open(&dir.path().join("memory.db")).unwrap();
+    let jid = ruling(&store, "support.dept", "refund-ish → billing");
+    // A human-authored ruling on the same scope must never be demoted.
+    let he = NewEntry {
+        kind: Kind::Ruling,
+        scope: q_scope("support.dept"),
+        body: serde_json::json!({"text": "human rule"}),
+        text: "human rule".to_string(),
+        source: Source::Human,
+        trust: 1.0,
+        author: Some("h".to_string()),
+        origin: None,
+    };
+    let hid = store.insert(&he).unwrap().0;
+
+    // Agreement → nothing contested.
+    let n = learn::feedback(&ctx, &resp.id, &[("dept".into(), "\"billing\"".into())], None).unwrap();
+    assert_eq!(n, 0);
+    assert_eq!(store.get(&jid).unwrap().unwrap().status, Status::Active);
+
+    // Contradiction → judge ruling contested, human ruling survives.
+    let n = learn::feedback(&ctx, &resp.id, &[("dept".into(), "\"technical\"".into())], None).unwrap();
+    assert_eq!(n, 1);
+    assert_eq!(store.get(&jid).unwrap().unwrap().status, Status::Contested);
+    assert_eq!(store.get(&hid).unwrap().unwrap().status, Status::Active);
+}
+
+/// Feedback on a hung (uncommitted) answer does not demote — the jury
+/// never committed a verdict for lessons to have caused.
+#[tokio::test]
+async fn feedback_on_hung_answer_does_not_demote() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "x",
+            "questions": {
+                "urgent": {"type": "noul", "id": "support.urgent", "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|req| {
+        let v = req.agent.contains("mock:a");
+        Ok(format!(r#"{{"urgent": {v}}}"#))
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 2); // 1-2 split → hung
+
+    let store = Store::open(&dir.path().join("memory.db")).unwrap();
+    let jid = ruling(&store, "support.urgent", "refunds are urgent");
+    let n = learn::feedback(&ctx, &resp.id, &[("urgent".into(), "true".into())], None).unwrap();
+    assert_eq!(n, 0);
+    assert_eq!(store.get(&jid).unwrap().unwrap().status, Status::Active);
+}
+
+/// `resolve` transitions: contested → active (accept) → forgotten (reject).
+#[test]
+fn resolve_transitions() {
+    let store = Store::open_memory().unwrap();
+    let id = ruling(&store, "q1", "rule");
+    store.set_status(&id, Status::Contested, None).unwrap();
+    assert_eq!(store.get(&id).unwrap().unwrap().status, Status::Contested);
+    // --accept
+    store.set_status(&id, Status::Active, None).unwrap();
+    assert_eq!(store.get(&id).unwrap().unwrap().status, Status::Active);
+    // --reject
+    assert!(store.forget(&id).unwrap());
+    assert_eq!(store.get(&id).unwrap().unwrap().status, Status::Forgotten);
+}
+
+/// `list_decisions` returns newest first; `recent_jury_decisions` only
+/// picks jury-decided rows.
+#[test]
+fn decisions_listing_and_recent() {
+    let store = Store::open_memory().unwrap();
+    for (id, by) in [("d1", "jury"), ("d2", "judge"), ("d3", "jury")] {
+        store
+            .record_decision(id, "h", &serde_json::json!({}), &serde_json::json!({"id": id}), by)
+            .unwrap();
+    }
+    let rows = store.list_decisions(10).unwrap();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0].id, "d3"); // newest first
+    let recent = store.recent_jury_decisions(10).unwrap();
+    assert_eq!(recent, vec!["d3".to_string(), "d1".to_string()]);
+    assert_eq!(store.recent_jury_decisions(1).unwrap()[0], "d3");
+}
+
+/// `policy_block` renders a Domain policy section only when configured,
+/// and `policy_file` resolves through Config::load (incl. missing file).
+#[test]
+fn policy_block_renders_and_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = cfg(&dir, &["mock:a"], "mock:j");
+    let ctx = ctx_with(c.clone(), MockBackend::new(|_| Ok("{}".into())));
+    assert_eq!(hungjury::jury::policy_block(&ctx), "");
+
+    c.policy = Some("refunds always → billing".to_string());
+    let ctx = ctx_with(c, MockBackend::new(|_| Ok("{}".into())));
+    let block = hungjury::jury::policy_block(&ctx);
+    assert!(block.contains("Domain policy") && block.contains("refunds always"));
+
+    // --policy-file resolves through Config::load.
+    let pf = dir.path().join("policy.md");
+    std::fs::write(&pf, "  domain rules here\n").unwrap();
+    let over = hungjury::config::CliOverrides {
+        policy_file: Some(pf),
+        ..Default::default()
+    };
+    let empty_toml = dir.path().join("empty.toml");
+    std::fs::write(&empty_toml, "").unwrap();
+    let loaded = Config::load(&over, Some(empty_toml.as_path())).unwrap();
+    assert_eq!(loaded.policy.as_deref(), Some("domain rules here"));
+}

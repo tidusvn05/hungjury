@@ -7,7 +7,7 @@ Decide EVERY question yourself, then also distill what this case teaches.
 Output ONLY a single JSON object — no prose, no markdown fences.
 
 {{schema_block}}
-
+{{policy_block}}
 ## Questions
 
 {{questions_block}}

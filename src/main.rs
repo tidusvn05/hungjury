@@ -70,6 +70,9 @@ struct Global {
     /// Prompt-template override directory.
     #[arg(long, global = true)]
     prompts_dir: Option<PathBuf>,
+    /// Domain policy file — injected into juror + judge prompts.
+    #[arg(long, global = true)]
+    policy_file: Option<PathBuf>,
     /// Memory db path.
     #[arg(long, global = true)]
     memory_db: Option<PathBuf>,
@@ -88,6 +91,8 @@ enum Cmd {
     Learn(LearnArgs),
     /// Run the memory go/no-go experiment over labeled cases.
     Eval(EvalArgs),
+    /// Decide every case in an unlabeled JSONL file, in parallel.
+    Batch(BatchArgs),
     /// Inspect and manage local memory.
     Memory {
         #[command(subcommand)]
@@ -139,15 +144,27 @@ struct LearnArgs {
     /// Judge every queued hung decision (default when no flag given).
     #[arg(long)]
     queue: bool,
-    /// Re-judge N random jury decisions; disagreements earn precedents.
+    /// Re-judge N jury decisions; disagreements earn precedents.
     #[arg(long)]
     audit: Option<usize>,
+    /// With --audit: pick the N most recent decisions instead of random.
+    #[arg(long, requires = "audit")]
+    recent: bool,
     /// Merge over-cap ruling sets via the judge.
     #[arg(long)]
     consolidate: bool,
     /// Report what would happen without calling any CLI.
     #[arg(long)]
     dry_run: bool,
+}
+
+#[derive(Args)]
+struct BatchArgs {
+    /// JSONL file: one `{"state": ..., "questions": {...}}` per line.
+    cases: PathBuf,
+    /// Output JSONL path (default: stdout).
+    #[arg(long)]
+    out: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -189,6 +206,26 @@ enum MemoryCmd {
         /// Include superseded/stale/contested/forgotten.
         #[arg(long)]
         all: bool,
+        /// Only this status (active|contested|superseded|stale|forgotten).
+        #[arg(long)]
+        status: Option<String>,
+    },
+    /// Recent decisions (ids for `feedback`).
+    Decisions {
+        /// How many to show, newest first.
+        #[arg(long, default_value = "20")]
+        last: usize,
+    },
+    /// Resolve a contested entry: --accept reactivates, --reject tombstones.
+    Resolve {
+        /// Entry id.
+        id: String,
+        /// Mark the entry active again.
+        #[arg(long, conflicts_with = "reject", required_unless_present = "reject")]
+        accept: bool,
+        /// Tombstone the entry (id kept; imports cannot resurrect it).
+        #[arg(long)]
+        reject: bool,
     },
     /// Show one entry as JSON.
     Show {
@@ -275,8 +312,12 @@ async fn dispatch(
             let (cfg, ctx) = load_ctx(over, cfg_path)?;
             let _ = cfg;
             let sets = parse_sets(&args.sets)?;
-            learn::feedback(&ctx, &args.decision_id, &sets, args.note.as_deref())?;
-            println!("{}", serde_json::json!({"ok": true, "decision": args.decision_id}));
+            let contested =
+                learn::feedback(&ctx, &args.decision_id, &sets, args.note.as_deref())?;
+            println!(
+                "{}",
+                serde_json::json!({"ok": true, "decision": args.decision_id, "contested": contested})
+            );
             Ok(0)
         }
         Cmd::Learn(args) => {
@@ -286,12 +327,16 @@ async fn dispatch(
                 learn::learn_queue(&ctx, args.dry_run).await?;
             }
             if let Some(n) = args.audit {
-                learn::learn_audit(&ctx, n, args.dry_run).await?;
+                learn::learn_audit(&ctx, n, args.recent, args.dry_run).await?;
             }
             if args.consolidate {
                 learn::learn_consolidate(&ctx, args.dry_run).await?;
             }
             Ok(0)
+        }
+        Cmd::Batch(args) => {
+            let (_cfg, ctx) = load_ctx(over, cfg_path)?;
+            hungjury::batch::run(&ctx, &args.cases, args.out.as_deref()).await
         }
         Cmd::Eval(args) => {
             eval::run(
@@ -306,7 +351,7 @@ async fn dispatch(
             .await?;
             Ok(0)
         }
-        Cmd::Memory { cmd } => cmd_memory(cmd, over, cfg_path),
+        Cmd::Memory { cmd } => cmd_memory(cmd, over, cfg_path).await,
         Cmd::Doctor { json } => {
             let cfg = Config::load(over, cfg_path);
             match &cfg {
@@ -385,7 +430,7 @@ fn parse_sets(sets: &[String]) -> hungjury::error::Result<Vec<(String, String)>>
         .collect()
 }
 
-fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> hungjury::error::Result<u8> {
+async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> hungjury::error::Result<u8> {
     let cfg = Config::load(over, cfg_path)?;
     let store = Store::open(&cfg.memory_db)?;
     match cmd {
@@ -394,7 +439,7 @@ fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> h
             let entries = store.search(&q, scope.as_deref())?;
             print_entries(&entries);
         }
-        MemoryCmd::List { kind, scope, all } => {
+        MemoryCmd::List { kind, scope, all, status } => {
             let kind = kind
                 .as_deref()
                 .map(|k| {
@@ -403,7 +448,66 @@ fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> h
                     })
                 })
                 .transpose()?;
-            print_entries(&store.list(kind, scope.as_deref(), !all)?);
+            let want = match status.as_deref() {
+                Some(s) => {
+                    let st = hungjury::memory::store::Status::parse(s);
+                    if st.as_str() != s {
+                        return Err(hungjury::error::Error::Request(format!(
+                            "unknown status '{s}'"
+                        )));
+                    }
+                    Some(st)
+                }
+                None => None,
+            };
+            let entries = store.list(kind, scope.as_deref(), !all || want.is_some())?;
+            print_entries(
+                &entries
+                    .into_iter()
+                    .filter(|e| want.as_ref().map(|w| e.status == *w).unwrap_or(true))
+                    .collect::<Vec<_>>(),
+            );
+        }
+        MemoryCmd::Decisions { last } => {
+            for d in store.list_decisions(last)? {
+                let resp = &d.response;
+                let answers = resp["answers"].as_object().map(|m| {
+                    m.iter()
+                        .map(|(k, v)| {
+                            let val = v
+                                .get("choice")
+                                .or_else(|| v.get("score"))
+                                .or_else(|| v.get("noul"))
+                                .cloned()
+                                .unwrap_or(serde_json::Value::String("hung".into()));
+                            (k.clone(), val)
+                        })
+                        .collect::<serde_json::Map<_, _>>()
+                });
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "id": d.id,
+                        "at": d.created_at,
+                        "decided_by": d.decided_by,
+                        "hung": resp["hung"],
+                        "answers": answers,
+                    })
+                );
+            }
+        }
+        MemoryCmd::Resolve { id, accept, reject: _ } => {
+            if store.get(&id)?.is_none() {
+                eprintln!("no entry '{id}'");
+                return Ok(1);
+            }
+            if accept {
+                store.set_status(&id, hungjury::memory::store::Status::Active, None)?;
+                println!("{}", serde_json::json!({"id": id, "status": "active"}));
+            } else {
+                let changed = store.forget(&id)?;
+                println!("{}", serde_json::json!({"id": id, "forgotten": changed}));
+            }
         }
         MemoryCmd::Show { id } => match store.get(&id)? {
             Some(e) => print_entries(std::slice::from_ref(&e)),
@@ -419,12 +523,18 @@ fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> h
         MemoryCmd::Stats => {
             let counts = store.counts()?;
             let stats = store.juror_stats_rows()?;
+            let quota = hungjury::quota::Quota::new(&cfg.data_dir, cfg.limits.daily_cap);
             println!("{}", serde_json::json!({
                 "entries": counts.iter().map(|(k, s, n)| serde_json::json!({
                     "kind": k, "status": s, "n": n,
                 })).collect::<Vec<_>>(),
+                "by_source": store.source_counts()?.iter().map(|(s, n)| serde_json::json!({
+                    "source": s, "n": n,
+                })).collect::<Vec<_>>(),
                 "decisions": store.decisions_len()?,
                 "queue_pending": store.queue_len()?,
+                "calls_today": quota.today_count().await,
+                "daily_cap": cfg.limits.daily_cap,
                 "juror_stats": stats.iter().map(|(j, q, n, a)| serde_json::json!({
                     "juror": j, "qid": q, "n": n, "agree": a,
                 })).collect::<Vec<_>>(),
@@ -502,6 +612,7 @@ fn overrides(g: &Global) -> CliOverrides {
         no_cache: g.no_cache,
         refresh: g.refresh,
         prompts_dir: g.prompts_dir.clone(),
+        policy_file: g.policy_file.clone(),
         memory_db: g.memory_db.clone(),
         profile: g.profile.clone(),
     }

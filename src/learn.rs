@@ -156,13 +156,44 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
     Ok(())
 }
 
-/// `learn --audit N`: N random jury decisions re-judged; disagreements
-/// earn precedents (+ rulings the judge distills).
-pub async fn learn_audit(ctx: &DecideCtx, n: usize, dry_run: bool) -> Result<()> {
+/// Demote every active `source=judge` ruling/precedent on `qid`'s scope
+/// to `contested`. Returns how many entries changed. Human and imported
+/// memory are never touched by this guard.
+pub fn demote_judge_entries(store: &Store, qid: &str) -> usize {
+    let mut demoted = 0;
+    for e in store
+        .rulings(qid, 100)
+        .unwrap_or_default()
+        .into_iter()
+        .chain(
+            store
+                .list(Some(Kind::Precedent), Some(&crate::memory::store::q_scope(qid)), true)
+                .unwrap_or_default(),
+        )
+    {
+        if e.source == Source::Judge
+            && store
+                .set_status(&e.id, crate::memory::store::Status::Contested, None)
+                .is_ok()
+        {
+            demoted += 1;
+        }
+    }
+    demoted
+}
+
+/// `learn --audit N`: N jury decisions re-judged; disagreements earn
+/// precedents (+ rulings the judge distills). `--recent` picks the N
+/// most recent decisions instead of a random sample.
+pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool) -> Result<()> {
     let Some(store) = &ctx.store else {
         return Err(Error::Memory("memory db unavailable".to_string()));
     };
-    let ids = store.sample_jury_decisions(n)?;
+    let ids = if recent {
+        store.recent_jury_decisions(n)?
+    } else {
+        store.sample_jury_decisions(n)?
+    };
     eprintln!("audit: {} decisions sampled", ids.len());
     for id in &ids {
         let Some((req_json, resp_json, _)) = store.get_decision(id)? else {
@@ -202,15 +233,7 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, dry_run: bool) -> Result<()>
                     judge::conflict_keys(&req, &call, &resp.answers, ctx.config.hung_threshold)
                 {
                     if let Some(q) = req.questions.get(&key) {
-                        for e in store.rulings(&q.qid(), 100).unwrap_or_default() {
-                            if e.source == crate::memory::store::Source::Judge {
-                                let _ = store.set_status(
-                                    &e.id,
-                                    crate::memory::store::Status::Contested,
-                                    None,
-                                );
-                            }
-                        }
+                        demote_judge_entries(store, &q.qid());
                     }
                 }
                 if keys.is_empty() {
@@ -375,15 +398,29 @@ fn question_desc(first: Option<&crate::memory::store::Entry>) -> String {
         .to_string()
 }
 
+/// Does `ballot` contradict the aggregated `answer`? Mirrors
+/// `disagreed_keys` for a single key.
+fn contradicts(answer: Option<&AnswerOut>, ballot: &Ballot) -> bool {
+    match (answer, ballot) {
+        (Some(AnswerOut::Choice { choice, .. }), Ballot::Choice(c)) => c != choice,
+        (Some(AnswerOut::Score { score, .. }), Ballot::Score(s)) => *s as f64 != score.round(),
+        (Some(AnswerOut::Noul { noul, .. }), Ballot::Noul(b)) => (*noul >= 0.5) != *b,
+        _ => false,
+    }
+}
+
 /// `feedback`: a human correction becomes a trust-1.0 precedent and
-/// updates `juror_stats`. `sets` are `key=value` pairs; `value` is parsed
-/// as the answer JSON (`"technical"`, `1`, `true`).
+/// updates `juror_stats`. When the human verdict contradicts a decided
+/// answer, every active judge-written ruling/precedent on that question's
+/// scope is demoted to `contested` — those lessons plausibly caused the
+/// wrong verdict. `sets` are `key=value` pairs; `value` is parsed as the
+/// answer JSON (`"technical"`, `1`, `true`).
 pub fn feedback(
     ctx: &DecideCtx,
     decision_id: &str,
     sets: &[(String, String)],
     note: Option<&str>,
-) -> Result<()> {
+) -> Result<usize> {
     let Some(store) = &ctx.store else {
         return Err(Error::Memory("memory db unavailable".to_string()));
     };
@@ -412,6 +449,7 @@ pub fn feedback(
         ),
     };
     let origin = store.machine_id().ok();
+    let mut demoted = 0;
     for (key, raw) in sets {
         let Some(q) = req.questions.get(key) else {
             return Err(Error::Request(format!("unknown question key '{key}'")));
@@ -419,6 +457,16 @@ pub fn feedback(
         let val: serde_json::Value = serde_json::from_str(raw)
             .unwrap_or_else(|_| serde_json::Value::String(raw.clone()));
         let ballot = q.validate_answer(key, &val)?;
+
+        // Human contradicts a decided answer → judge lessons on this
+        // scope are suspect; demote them to contested.
+        let stored = resp.answers.get(key);
+        let decided = stored
+            .is_some_and(|a| !crate::jury::vote::is_hung(a, ctx.config.hung_threshold));
+        if decided && contradicts(stored, &ballot) {
+            demoted += demote_judge_entries(store, &q.qid());
+        }
+
         let e = NewEntry {
             kind: Kind::Precedent,
             scope: crate::memory::store::q_scope(&q.qid()),
@@ -451,5 +499,8 @@ pub fn feedback(
             }
         }
     }
-    Ok(())
+    if demoted > 0 {
+        eprintln!("  {demoted} judge entries demoted to contested");
+    }
+    Ok(demoted)
 }

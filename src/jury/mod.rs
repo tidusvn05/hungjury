@@ -130,6 +130,9 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         "tools": workspace_mode,
         "explain": ctx.config.explain,
         "memory": ctx.config.memory.enabled,
+        // Policy text changes prompts — fold its hash into the cache key
+        // so stale verdicts can't hit after a policy edit.
+        "policy": ctx.config.policy.as_deref().map(crate::util::sha256_str),
     })
     .to_string();
     let cache_key = Cache::key(
@@ -391,6 +394,20 @@ fn system_prompt(_ctx: &DecideCtx) -> Option<String> {
     )
 }
 
+/// The `{{policy_block}}` prompt section: a `## Domain policy` block when
+/// `config.policy` is set, else empty. Shared by juror + judge prompts.
+pub fn policy_block(ctx: &DecideCtx) -> String {
+    ctx.config
+        .policy
+        .as_deref()
+        .map(|p| {
+            format!(
+                "## Domain policy\n\n{p}\n\nApply these rules over your own defaults.\n\n"
+            )
+        })
+        .unwrap_or_default()
+}
+
 /// Render the juror prompt via the template.
 fn render_juror_prompt(
     ctx: &DecideCtx,
@@ -402,6 +419,7 @@ fn render_juror_prompt(
     let tmpl = ctx.prompts.load("juror.md")?;
     let mut vars: HashMap<&str, String> = HashMap::new();
     vars.insert("schema_block", schema_block_text(schema));
+    vars.insert("policy_block", policy_block(ctx));
     vars.insert("questions_block", questions_render(req));
     vars.insert("memory_block", memory_block.to_string());
     vars.insert("workspace_block", workspace_render(req));

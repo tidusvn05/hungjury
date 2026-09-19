@@ -5,6 +5,7 @@
 //! local SQLite store; `learn`/`eval`/`feedback` drive offline learning.
 
 pub mod backend;
+pub mod batch;
 pub mod cache;
 pub mod config;
 pub mod doctor;
