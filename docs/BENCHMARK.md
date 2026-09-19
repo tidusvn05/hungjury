@@ -5,8 +5,9 @@ local memory approach a single strong judge, across different hypothetical
 use cases?
 
 - Method: `hungjury eval <cases>` per domain — deterministic train/test
-  split (seed 42, 50/50), three arms (`jury`, `jury_memory`, `judge`),
-  `go` verdict from the Phase 2 criteria.
+  split (seed 42, 50/50), arms `jury`, `jury_memory`, `judge` (cold),
+  `judge_informed` (sees ballots + memory), `go` verdict from the
+  Phase 2 criteria.
 - Jury: `claude:haiku`, `codex:gpt-5.6-terra@low`, `devin:swe-2-medium`
   (1 sample each). Judge: `claude:opus@high`. Escalation `sync` in training.
 - Memory per domain is isolated (`HUNGJURY_HOME=bench/<domain>/home`), so
@@ -154,6 +155,13 @@ that arm.
 cargo build
 python3 bench/<domain>/gen.py          # deterministic cases.jsonl
 bench/run_bench.sh <domain>            # ~600 calls; writes bench/<d>/report.json
+
+# overrides / variants
+SEED=7 REPORT=report_s7.json bench/run_bench.sh <domain>
+BENCH_HOME=$PWD/bench/<d>/home_hung LABEL=<d>-hung REPORT=report_hung.json \
+  bench/run_bench.sh <domain> --hung-threshold 0.8
+
+python3 bench/summarize.py             # mean±stdev per arm across report*.json
 ```
 
 See `bench/README.md` for the full list and `bench/bench.toml` for the
@@ -164,3 +172,67 @@ limits used (daily_cap 5000, max_concurrency 8).
 ~600 spawned CLI calls per domain (30 train decides × 3–4 calls + 30 test ×
 3 arms). Roughly 3,600 calls for the six new domains; `support` reuses the
 Phase 2 report. Call logs live in `bench/<d>/home/calls.jsonl`.
+
+---
+
+# Rerun — contested-guard + judge_informed arm
+
+Second round on the two domains where memory *hurt* (`pr_review`,
+`adversarial`), plus an `adversarial` variant at `--hung-threshold 0.8` to
+exercise escalation. New arms/fields: `judge_informed` (judge sees juror
+ballots + aggregated answers + memory — production-faithful), `mismatches`,
+`calls_by_backend`, `config` echo. Fresh `BENCH_HOME` per run.
+
+Guard semantics (`judge::commit_judge` / `judge::conflict_keys`): a ruling
+or precedent is written `contested` — kept for audit, excluded from
+retrieval — when the judge answered a question the jury had already
+*decided* (not hung under the threshold) with a different verdict.
+Rulings on genuinely hung keys stay `active`: resolving them is what
+escalation is for. `learn --audit` re-judges all keys and demotes
+conflicting `source=judge` rulings the same way.
+
+## Results (seed 42, 30 train / 30 test, fresh memory)
+
+| arm | pr_review r1 | pr_review r2 | adversarial r1 | adversarial r2 | adversarial-hung |
+|---|---|---|---|---|---|
+| jury | 80% | 72% | 80% | 77% | 80% |
+| jury+memory | 73% | **76%** | 68% | 69% | 67% |
+| judge (cold) | 62% | 63% | 69% | 68% | 66% |
+| judge_informed | — | 61% | — | 70% | 67% |
+| train escalations | ? | 4/30 | ? | 3/30 | **13/30** |
+
+Contested entries written: `pr_review` 0, `adversarial` 1 ruling
+(`support.frustration` — judge overrode a decided jury), `adversarial-hung` 0.
+
+## Reading it
+
+- **Run-to-run variance is real**: identical `jury` arm moved 80→72% on
+  `pr_review` between rounds (same cases, same seed — model-side
+  nondeterminism). Swings of ±5–8 pts at n=90 are noise; the memory
+  *direction* flip on `pr_review` (−7 pts → +3 pts) is suggestive, not
+  proof.
+- **`judge_informed` ≈ `judge`** on both domains (61 vs 63, 70 vs 68):
+  seeing ballots doesn't move the judge here — its rubric genuinely
+  diverges from the label policy, it isn't missing information.
+- **The guard fired but couldn't fix the main poisoning path.** On
+  `adversarial`, judge rulings were written for *hung* keys — the guard
+  only contests overrides of decided juries, so wrong-policy lessons on
+  hung questions still go `active` and still drag `jury_memory` down
+  (69 vs 77). At threshold 0.8, 13/30 train cases escalated → 28 rulings
+  → `jury_memory` −13 pts. **More escalation ⇒ more poisoning when the
+  judge's policy is wrong.** The durable fix is feedback/`learn --audit`
+  demotion over time, or a judge prompt aligned to the task policy.
+- **Hung coverage**: threshold 0.8 drove 43% of train cases to the judge
+  (vs ~10% at 0.5), producing 28 rulings + 14 precedents — escalation and
+  memory-write paths well exercised. Test-arm `hung_rate` stayed 0%
+  because the seed-42 test half happened to draw unanimous-vote cases;
+  hung-rate movement needs a test split that actually splits jurors.
+
+## Limitations (unchanged)
+
+- Labels are a written policy per domain, not objective ground truth —
+  "judge disagrees" ≠ "judge is wrong".
+- 30 test cases/domain ⇒ wide confidence intervals; use multi-seed runs
+  (`summarize.py`) before reading small deltas.
+- `judge` (cold) answers blind — kept for historical comparability;
+  `judge_informed` is the fairer ceiling.

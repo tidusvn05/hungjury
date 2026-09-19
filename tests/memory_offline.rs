@@ -251,6 +251,99 @@ async fn learn_queue_judges_hung() {
     assert!(rows.iter().any(|(j, _, _, a)| j == "mock:b" && *a == 0));
 }
 
+/// Guard: rulings on a question the judge *overrode* a decided jury
+/// majority land `contested`; rulings on genuinely hung questions stay
+/// active (that's what escalation is for).
+#[tokio::test]
+async fn judge_override_of_decided_jury_marks_contested() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "charged twice, want a refund; also is this urgent?",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "which team", "criteria": {"billing": "m", "technical": "t"}},
+                "urgent": {"type": "noul", "id": "support.urgent",
+                           "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    // dept: all jurors say billing (decided). urgent: 1-2 split (hung).
+    let backend = MockBackend::new(|req| {
+        if req.agent.starts_with("judge:") {
+            return Ok(r#"{
+                "answers": {"dept": "technical", "urgent": true},
+                "rationale": {"dept": "because", "urgent": "yes"},
+                "rulings": [
+                    {"question": "dept", "text": "always technical"},
+                    {"question": "urgent", "text": "refund requests are urgent"}
+                ],
+                "facts": []
+            }"#
+            .to_string());
+        }
+        let dept = r#""billing""#;
+        let urgent = if req.agent.contains("mock:a") { "true" } else { "false" };
+        Ok(format!(r#"{{"dept": {dept}, "urgent": {urgent}}}"#))
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(c, backend);
+    let (_resp, _code) = decide(&ctx, &req).await.unwrap();
+
+    let store = Store::open(&dir.path().join("memory.db")).unwrap();
+    let all = store.list(Some(Kind::Ruling), None, false).unwrap();
+    assert_eq!(all.len(), 2);
+    let dept_ruling = all.iter().find(|e| e.text.contains("always technical")).unwrap();
+    let urg_ruling = all.iter().find(|e| e.text.contains("urgent")).unwrap();
+    assert_eq!(dept_ruling.status, Status::Contested); // overrode decided jury
+    assert_eq!(urg_ruling.status, Status::Active); // hung jury — escalation's job
+    // Contested rulings are excluded from retrieval.
+    assert!(store.rulings("support.dept", 10).unwrap().is_empty());
+    assert_eq!(store.rulings("support.urgent", 10).unwrap().len(), 1);
+}
+
+/// Same path but judge agrees with the jury → ruling stays active.
+#[tokio::test]
+async fn judge_agreement_keeps_ruling_active() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "charged twice, want a refund; also is this urgent?",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "which team", "criteria": {"billing": "m", "technical": "t"}},
+                "urgent": {"type": "noul", "id": "support.urgent",
+                           "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|req| {
+        if req.agent.starts_with("judge:") {
+            return Ok(r#"{
+                "answers": {"dept": "billing", "urgent": true},
+                "rationale": {"dept": "money", "urgent": "yes"},
+                "rulings": [{"question": "dept", "text": "duplicate charge → billing"}],
+                "facts": []
+            }"#
+            .to_string());
+        }
+        let urgent = if req.agent.contains("mock:a") { "true" } else { "false" };
+        Ok(format!(r#"{{"dept": "billing", "urgent": {urgent}}}"#))
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(c, backend);
+    let _ = decide(&ctx, &req).await.unwrap();
+
+    let store = Store::open(&dir.path().join("memory.db")).unwrap();
+    let act = store.rulings("support.dept", 10).unwrap();
+    assert_eq!(act.len(), 1);
+    assert_eq!(act[0].status, Status::Active);
+}
+
 /// `feedback` writes a trust-1.0 precedent + updates juror_stats.
 #[tokio::test]
 async fn feedback_writes_human_precedent() {

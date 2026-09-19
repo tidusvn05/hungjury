@@ -1,0 +1,570 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.6333333333333333,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 30
+      },
+      "correct": 57,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 6,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 6,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 5,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 5,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 2,
+          "expected": "frontend",
+          "got": "backend",
+          "key": "subsystem"
+        },
+        {
+          "case": 7,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 7,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 14,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 14,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 13,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 13,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 10,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 15,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 15,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 19,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 20,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 20,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        }
+      ],
+      "wall_ms_mean": 21097.533333333333,
+      "wall_ms_p95": 30382
+    },
+    "judge_informed": {
+      "accuracy": 0.6111111111111112,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 30
+      },
+      "correct": 55,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 6,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 6,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 5,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 5,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 1,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 7,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 7,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 2,
+          "expected": "frontend",
+          "got": "backend",
+          "key": "subsystem"
+        },
+        {
+          "case": 14,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 14,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 10,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 13,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 13,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 20,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 20,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 19,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 17,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        }
+      ],
+      "wall_ms_mean": 22648.9,
+      "wall_ms_p95": 36510
+    },
+    "jury": {
+      "accuracy": 0.7222222222222222,
+      "calls": 90,
+      "calls_by_backend": {
+        "claude": 30,
+        "codex": 30,
+        "devin": 30
+      },
+      "correct": 65,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 6,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 6,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 11,
+          "expected": 2,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 7,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 7,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 15,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 2,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 2,
+          "expected": "frontend",
+          "got": "backend",
+          "key": "subsystem"
+        },
+        {
+          "case": 14,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 14,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 19,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 20,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 20,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 18,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 18,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 18,
+          "expected": "frontend",
+          "got": "backend",
+          "key": "subsystem"
+        }
+      ],
+      "wall_ms_mean": 26082.5,
+      "wall_ms_p95": 46529
+    },
+    "jury_memory": {
+      "accuracy": 0.7555555555555555,
+      "calls": 90,
+      "calls_by_backend": {
+        "claude": 30,
+        "codex": 30,
+        "devin": 30
+      },
+      "correct": 68,
+      "decided": 90,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 6,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 6,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 5,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 2,
+          "expected": "frontend",
+          "got": "backend",
+          "key": "subsystem"
+        },
+        {
+          "case": 7,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 7,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 14,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 14,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 19,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 20,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 20,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 18,
+          "expected": "frontend",
+          "got": "backend",
+          "key": "subsystem"
+        },
+        {
+          "case": 26,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 26,
+          "expected": 0,
+          "got": 1,
+          "key": "risk"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 27,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "risk"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "needs_senior"
+        }
+      ],
+      "wall_ms_mean": 34773.36666666667,
+      "wall_ms_p95": 64030
+    }
+  },
+  "cases": 60,
+  "config": {
+    "escalate": "Sync",
+    "hung_threshold": 0.5,
+    "judge": "claude:opus@high",
+    "jurors": [
+      "claude:haiku",
+      "codex:gpt-5.6-terra@low",
+      "devin:swe-2-medium"
+    ],
+    "samples": 1
+  },
+  "go": {
+    "accuracy_gap_jury_to_judge": -0.0888888888888889,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "pass": false
+  },
+  "label": "pr_review",
+  "seed": 42,
+  "test": 30,
+  "train": 30
+}

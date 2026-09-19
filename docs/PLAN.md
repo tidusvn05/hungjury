@@ -496,3 +496,22 @@ Chỉ số cho từng arm × câu hỏi: accuracy (choice, noul làm tròn), MAE
 - Gap jury→judge = 5.0 điểm; **memory đóng 77.8% khoảng cách** (≥50% ⇒ GO theo tiêu chí phần 8).
 - Hung rate = 0 ở cả 3 arm trên bộ này — memory thắng ở accuracy, không phải hung-rate. (Bộ case biên đã làm jury chia phiếu trong train, nhưng test arm juror vẫn quyết được — khác biệt là đúng/sai.)
 - Ghi chú vận hành: run này chạy binary serial (đã parallelize `eval.rs` sau khi launch — probes xác nhận `buffer_unordered` cho ~8 call song song); ~608 calls tiêu tốn.
+
+### Thay đổi sau benchmark (2026-09-19) — contested-on-override
+
+Benchmark 7 domain (`docs/BENCHMARK.md`) cho thấy rulings của judge làm
+*hại* jury khi judge lệch policy labels (pr_review 80→73%, adversarial
+80→68%). Guard mới:
+
+- `judge::commit_judge` nhận thêm `answers` + `hung_threshold`; rulings /
+  precedents cho các key mà judge **ghi đè một jury đã quyết** (không hung
+  theo threshold) được ghi `status=contested` — lưu để audit nhưng loại
+  khỏi retrieval.
+- Rulings cho câu **thật sự hung** vẫn `active` — đó là lý do escalation
+  tồn tại.
+- `learn --audit` demote các ruling active có `source=judge` trên scope
+  conflict (memory của human/import không bị đụng).
+- `eval` thêm arm `judge_informed` (judge thấy ballots + answers + memory
+  như production), `mismatches` (≤20), `calls_by_backend`, echo `config`.
+- `bench/run_bench.sh`: env overrides `SEED`/`REPORT`/`LABEL`/`BENCH_HOME`;
+  `bench/summarize.py` gộp `report*.json` theo label, mean±stdev đa-seed.

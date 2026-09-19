@@ -274,6 +274,8 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                             &call,
                             &hung,
                             &juror_ballots,
+                            &answers,
+                            ctx.config.hung_threshold,
                             repo_id.as_deref(),
                             ws_path.as_deref(),
                             &ctx.config.judge,

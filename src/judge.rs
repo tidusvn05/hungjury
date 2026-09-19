@@ -18,7 +18,7 @@ use crate::backend::{
 use crate::error::{Error, Result};
 use crate::jury::DecideCtx;
 use crate::jury::{questions_render, schema_block_text, state_render, workspace_render};
-use crate::memory::store::{Kind, NewEntry, Source, Store};
+use crate::memory::store::{Kind, NewEntry, Source, Status, Store};
 use crate::memory::workspace as ws;
 use crate::question::{Ballot, Question, validate_ballot};
 use crate::request::Request;
@@ -304,8 +304,51 @@ fn render_judge_prompt(
     Ok(crate::prompt::render(&tmpl, &vars))
 }
 
+/// The jury's winning ballot for an answer the jury *decided* (not hung
+/// under `hung_threshold`) — `None` when hung, i.e. no trusted majority
+/// for the judge's verdict to conflict with.
+fn decided_ballot(a: &AnswerOut, hung_threshold: f64) -> Option<Ballot> {
+    if crate::jury::vote::is_hung(a, hung_threshold) {
+        return None;
+    }
+    Some(match a {
+        AnswerOut::Choice { choice, .. } => Ballot::Choice(choice.clone()),
+        AnswerOut::Score { score, .. } => Ballot::Score(score.round().max(0.0) as usize),
+        AnswerOut::Noul { noul, .. } => Ballot::Noul(*noul >= 0.5),
+    })
+}
+
+/// Question keys where the judge overrode a *decided* jury majority
+/// (confidence ≥ hung_threshold). Judge-written memory for these keys is
+/// stored `contested` — the benchmark showed a judge rubric diverging
+/// from the task policy propagates through rulings and poisons later
+/// jurors. Rulings on hung questions stay active: that's what escalation
+/// is for.
+pub fn conflict_keys(
+    req: &Request,
+    call: &JudgeCall,
+    answers: &BTreeMap<String, AnswerOut>,
+    hung_threshold: f64,
+) -> Vec<String> {
+    req.questions
+        .keys()
+        .filter(|k| {
+            match (
+                call.judged.get(*k),
+                answers.get(*k).and_then(|a| decided_ballot(a, hung_threshold)),
+            ) {
+                (Some(j), Some(jury)) => j.ballot != jury,
+                _ => false,
+            }
+        })
+        .cloned()
+        .collect()
+}
+
 /// Persist rulings/facts/juror_stats + one precedent per `precedent_keys`.
-/// No-op under `--memory-readonly`. Returns the ids written.
+/// No-op under `--memory-readonly`. Rulings/precedents for keys where the
+/// judge contradicts a decided jury majority are stored `contested`
+/// (excluded from retrieval, still auditable). Returns the ids written.
 #[allow(clippy::too_many_arguments)]
 pub fn commit_judge(
     store: &Store,
@@ -314,6 +357,8 @@ pub fn commit_judge(
     call: &JudgeCall,
     precedent_keys: &[String],
     juror_ballots: &[(String, BTreeMap<String, Ballot>)],
+    answers: &BTreeMap<String, AnswerOut>,
+    hung_threshold: f64,
     repo_id: Option<&str>,
     ws_path: Option<&Path>,
     judge_str: &str,
@@ -325,6 +370,8 @@ pub fn commit_judge(
     let mut wrote = Vec::new();
     let judge_json = &call.raw;
     let judged = &call.judged;
+    let contested: std::collections::BTreeSet<String> =
+        conflict_keys(req, call, answers, hung_threshold).into_iter().collect();
 
     // Rulings: question key → qid scope; reject >300 chars / unknown keys.
     if let Some(rs) = judge_json["rulings"].as_array() {
@@ -351,6 +398,9 @@ pub fn commit_judge(
                 origin: origin.clone(),
             };
             if let Ok((id, true)) = store.insert(&e) {
+                if contested.contains(key) {
+                    let _ = store.set_status(&id, Status::Contested, None);
+                }
                 wrote.push(id);
             }
         }
@@ -394,6 +444,9 @@ pub fn commit_judge(
             origin: origin.clone(),
         };
         if let Ok((id, true)) = store.insert(&e) {
+            if contested.contains(key.as_str()) {
+                let _ = store.set_status(&id, Status::Contested, None);
+            }
             wrote.push(id);
         }
     }

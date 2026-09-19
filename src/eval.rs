@@ -28,7 +28,7 @@ use crate::judge;
 use crate::jury::{self, DecideCtx};
 use crate::question::Ballot;
 use crate::request::Request;
-use crate::response::Response;
+use crate::response::{AnswerOut, Response};
 
 /// One labeled eval case.
 struct Case {
@@ -111,9 +111,13 @@ struct ArmStats {
     correct: usize,
     /// Spawned CLI calls (juror attempts + judge calls).
     calls: usize,
+    /// Calls split by backend (`claude`/`codex`/`devin`).
+    calls_by_backend: BTreeMap<String, usize>,
     /// Per-case decision wall ms (for mean/p95).
     #[serde(skip)]
     walls: Vec<u64>,
+    /// Decided-but-wrong details `{case, key, expected, got}` (cap 20).
+    mismatches: Vec<serde_json::Value>,
 }
 
 impl ArmStats {
@@ -134,24 +138,81 @@ impl ArmStats {
     }
 }
 
+/// The winning value of an aggregated answer, as plain JSON.
+fn answerout_json(a: &AnswerOut) -> serde_json::Value {
+    match a {
+        AnswerOut::Choice { choice, .. } => serde_json::Value::String(choice.clone()),
+        AnswerOut::Score { score, .. } => serde_json::json!(score.round() as i64),
+        AnswerOut::Noul { noul, .. } => serde_json::Value::Bool(*noul >= 0.5),
+    }
+}
+
+fn note_calls(stats: &mut ArmStats, agent: &str, n: usize) {
+    stats.calls += n;
+    let backend = agent.split(':').next().unwrap_or("?").to_string();
+    *stats.calls_by_backend.entry(backend).or_default() += n;
+}
+
+fn note_mismatch(
+    stats: &mut ArmStats,
+    case: usize,
+    key: &str,
+    want: &serde_json::Value,
+    got: serde_json::Value,
+) {
+    if stats.mismatches.len() < 20 {
+        stats.mismatches.push(serde_json::json!({
+            "case": case, "key": key, "expected": want, "got": got,
+        }));
+    }
+}
+
 /// Accumulate one response into an arm.
-fn score_response(stats: &mut ArmStats, resp: &Response, expected: &BTreeMap<String, serde_json::Value>) {
+fn score_response(
+    stats: &mut ArmStats,
+    case: usize,
+    resp: &Response,
+    expected: &BTreeMap<String, serde_json::Value>,
+) {
     stats.walls.push(resp.usage.wall_ms);
-    stats.calls += resp.usage.jurors.len()
-        + resp
-            .usage
-            .jurors
-            .iter()
-            .map(|j| j.retries as usize)
-            .sum::<usize>()
-        + usize::from(resp.usage.judge.is_some());
+    for j in &resp.usage.jurors {
+        note_calls(stats, &j.juror, 1 + j.retries as usize);
+    }
+    if let Some(ju) = &resp.usage.judge {
+        note_calls(stats, &ju.model, 1);
+    }
     for (key, want) in expected {
         match resp.answers.get(key).and_then(|a| answer_matches(a, want)) {
             Some(true) => {
                 stats.decided += 1;
                 stats.correct += 1;
             }
-            Some(false) => stats.decided += 1,
+            Some(false) => {
+                stats.decided += 1;
+                note_mismatch(stats, case, key, want, answerout_json(&resp.answers[key]));
+            }
+            None => stats.hung += 1,
+        }
+    }
+}
+
+/// Score one judge call against expected values.
+fn score_judge(
+    stats: &mut ArmStats,
+    case: usize,
+    call: &judge::JudgeCall,
+    expected: &BTreeMap<String, serde_json::Value>,
+) {
+    for (key, want) in expected {
+        match call.judged.get(key) {
+            Some(j) => {
+                stats.decided += 1;
+                if ballot_matches(&j.ballot, want) {
+                    stats.correct += 1;
+                } else {
+                    note_mismatch(stats, case, key, want, j.ballot.to_json());
+                }
+            }
             None => stats.hung += 1,
         }
     }
@@ -209,8 +270,10 @@ pub async fn run(
         }
     }
 
-    // Pass 2: jury arm — no memory, no escalation.
+    // Pass 2: jury arm — no memory, no escalation. Responses are kept:
+    // the `judge_informed` arm reuses their ballots.
     let mut jury_stats = ArmStats::default();
+    let mut jury_resps: Vec<Option<Response>> = vec![None; test.len()];
     {
         let mut over = base.clone();
         over.no_memory = true;
@@ -229,7 +292,10 @@ pub async fn run(
         .await;
         for (i, r) in results {
             match r {
-                Ok((resp, _)) => score_response(&mut jury_stats, &resp, &test[i].expected),
+                Ok((resp, _)) => {
+                    score_response(&mut jury_stats, i, &resp, &test[i].expected);
+                    jury_resps[i] = Some(resp);
+                }
                 Err(e) => eprintln!("  jury test {}/{} failed: {e}", i + 1, test.len()),
             }
         }
@@ -256,7 +322,7 @@ pub async fn run(
         .await;
         for (i, r) in results {
             match r {
-                Ok((resp, _)) => score_response(&mut mem_stats, &resp, &test[i].expected),
+                Ok((resp, _)) => score_response(&mut mem_stats, i, &resp, &test[i].expected),
                 Err(e) => eprintln!("  mem test {}/{} failed: {e}", i + 1, test.len()),
             }
         }
@@ -284,6 +350,10 @@ pub async fn run(
                         }
                         None => String::new(),
                     };
+                    let ws_path = match &c.req.state {
+                        crate::request::State::Workspace { path, .. } => Some(path.as_path()),
+                        _ => None,
+                    };
                     let (call, usage) = judge::judge_call(
                         ctx,
                         &c.req,
@@ -292,7 +362,7 @@ pub async fn run(
                         &BTreeMap::new(),
                         &hung,
                         &crate::util::nonce(),
-                        None,
+                        ws_path,
                     )
                     .await;
                     (i, call, usage)
@@ -303,24 +373,101 @@ pub async fn run(
         .collect::<Vec<_>>()
         .await;
         for (i, call, usage) in results {
-            judge_stats.calls += 1;
+            note_calls(&mut judge_stats, &usage.model, 1);
             judge_stats.walls.push(usage.ms);
             match call {
-                Some(call) => {
-                    for (key, want) in &test[i].expected {
-                        match call.judged.get(key) {
-                            Some(j) => {
-                                judge_stats.decided += 1;
-                                if ballot_matches(&j.ballot, want) {
-                                    judge_stats.correct += 1;
-                                }
-                            }
-                            None => judge_stats.hung += 1,
-                        }
-                    }
-                }
+                Some(call) => score_judge(&mut judge_stats, i, &call, &test[i].expected),
                 None => eprintln!(
                     "  judge test {}/{} failed: {}",
+                    i + 1,
+                    test.len(),
+                    usage.error.unwrap_or_default()
+                ),
+            }
+        }
+    }
+
+    // Pass 5: judge_informed — production-faithful judge that sees the
+    // jury's ballots, the aggregated answers, and memory. Fairer ceiling
+    // than the cold `judge` arm.
+    let mut informed_stats = ArmStats::default();
+    {
+        let mut over = base.clone();
+        over.no_memory = false;
+        over.memory_readonly = true;
+        over.no_cache = true;
+        let ctx = ctx_for(&over, config_path)?;
+        let par = ctx.config.limits.max_concurrency.max(1);
+        let results: Vec<_> = stream::iter(
+            test.iter()
+                .enumerate()
+                .filter_map(|(i, c)| jury_resps[i].as_ref().map(|r| (i, c, r)))
+                .map(|(i, c, resp)| {
+                    let ctx = &ctx;
+                    async move {
+                        let hung: Vec<String> = c.req.questions.keys().cloned().collect();
+                        let memory_block = match &ctx.store {
+                            Some(s) => crate::memory::retrieve::retrieve(
+                                s,
+                                &c.req,
+                                &ctx.config.memory,
+                                None,
+                            )
+                            .map(|r| r.block)
+                            .unwrap_or_default(),
+                            None => String::new(),
+                        };
+                        let juror_ballots: Vec<(String, BTreeMap<String, Ballot>)> = resp
+                            .usage
+                            .jurors
+                            .iter()
+                            .filter(|j| j.status == "ok")
+                            .filter_map(|j| {
+                                j.answers.as_ref().map(|a| (j.juror.clone(), a.clone()))
+                            })
+                            .map(|(name, ans)| {
+                                let ballots: BTreeMap<String, Ballot> = ans
+                                    .iter()
+                                    .filter_map(|(k, v)| {
+                                        c.req
+                                            .questions
+                                            .get(k)
+                                            .and_then(|q| q.validate_answer(k, v).ok())
+                                            .map(|b| (k.clone(), b))
+                                    })
+                                    .collect();
+                                (name, ballots)
+                            })
+                            .collect();
+                        let ws_path = match &c.req.state {
+                            crate::request::State::Workspace { path, .. } => Some(path.as_path()),
+                            _ => None,
+                        };
+                        let (call, usage) = judge::judge_call(
+                            ctx,
+                            &c.req,
+                            &memory_block,
+                            &juror_ballots,
+                            &resp.answers,
+                            &hung,
+                            &crate::util::nonce(),
+                            ws_path,
+                        )
+                        .await;
+                        (i, call, usage)
+                    }
+                }),
+        )
+        .buffer_unordered(par)
+        .collect::<Vec<_>>()
+        .await;
+        for (i, call, usage) in results {
+            note_calls(&mut informed_stats, &usage.model, 1);
+            informed_stats.walls.push(usage.ms);
+            match call {
+                Some(call) => score_judge(&mut informed_stats, i, &call, &test[i].expected),
+                None => eprintln!(
+                    "  informed test {}/{} failed: {}",
                     i + 1,
                     test.len(),
                     usage.error.unwrap_or_default()
@@ -340,16 +487,25 @@ pub async fn run(
     };
     let go = closed >= 0.5 || (hung_drop >= 0.3 && ma >= ja - 0.001);
 
+    let report_cfg = Config::load(base, config_path)?;
     let report = serde_json::json!({
         "label": label,
         "cases": n,
         "train": train.len(),
         "test": test.len(),
         "seed": seed,
+        "config": {
+            "jurors": report_cfg.jurors,
+            "judge": report_cfg.judge,
+            "samples": report_cfg.samples,
+            "hung_threshold": report_cfg.hung_threshold,
+            "escalate": format!("{:?}", report_cfg.escalate),
+        },
         "arms": {
             "jury": arm_json(&jury_stats),
             "jury_memory": arm_json(&mem_stats),
             "judge": arm_json(&judge_stats),
+            "judge_informed": arm_json(&informed_stats),
         },
         "go": {
             "accuracy_gap_jury_to_judge": gap,
@@ -386,8 +542,10 @@ fn arm_json(s: &ArmStats) -> serde_json::Value {
         "accuracy": s.accuracy(),
         "hung_rate": s.hung_rate(),
         "calls": s.calls,
+        "calls_by_backend": s.calls_by_backend,
         "wall_ms_mean": mean,
         "wall_ms_p95": p95,
+        "mismatches": s.mismatches,
     })
 }
 
@@ -503,9 +661,11 @@ mod tests {
         };
         let mut stats = ArmStats::default();
         let expected = BTreeMap::from([("k".into(), json!("a"))]);
-        score_response(&mut stats, &resp, &expected);
+        score_response(&mut stats, 0, &resp, &expected);
         let j = arm_json(&stats);
         assert_eq!(j["calls"], json!(4)); // 2 jurors + 1 retry + 1 judge
+        assert_eq!(j["calls_by_backend"]["a"], json!(2));
+        assert_eq!(j["calls_by_backend"]["m"], json!(1));
         assert_eq!(j["wall_ms_mean"], json!(100.0));
         assert_eq!(j["wall_ms_p95"], json!(100));
         assert_eq!(j["accuracy"], json!(1.0));

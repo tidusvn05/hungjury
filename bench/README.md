@@ -39,3 +39,35 @@ isolated memory/cache/quota, and passes `--config bench/bench.toml`
 
 To run a cheap pilot first: `bench/run_bench.sh <domain> --train-frac 0.05`
 on a trimmed `cases.jsonl` (e.g. `head -6`).
+
+### Overrides
+
+`SEED`, `REPORT`, `LABEL` are environment variables; extra args go to
+`hungjury eval` (global flags like `--hung-threshold`/`--jurors` too):
+
+```bash
+SEED=7  REPORT=report_s7.json  bench/run_bench.sh pr_review
+LABEL=adversarial-hung REPORT=report_hung.json \
+  bench/run_bench.sh adversarial --hung-threshold 0.8
+```
+
+### Multi-seed + summary
+
+```bash
+for s in 42 7 1337; do SEED=$s REPORT=report_s$s.json bench/run_bench.sh pr_review; done
+python3 bench/summarize.py            # mean±stdev per arm, grouped by label
+```
+
+### Hung-rate coverage
+
+3 jurors + `--hung-threshold 0.5` almost never hangs (a 2–1 split decides).
+`--hung-threshold 0.8` forces escalation on low-confidence majorities —
+use the `adversarial-hung` variant above to exercise the judge path.
+
+## Reports
+
+`bench/<domain>/report*.json` — per-arm `accuracy`, `hung_rate`, `calls`
+(+ `calls_by_backend`), `wall_ms_mean`/`p95`, `mismatches` (≤20 samples),
+and a `config` echo. Arms: `jury`, `jury_memory`, `judge` (cold — answers
+blind), `judge_informed` (sees juror ballots + answers, like production
+escalation).

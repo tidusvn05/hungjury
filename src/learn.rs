@@ -81,6 +81,7 @@ async fn rejudge(
     store: &Store,
     req: &Request,
     resp: &Response,
+    judge_keys: &[String],
 ) -> Option<(JudgeCall, Vec<(String, BTreeMap<String, Ballot>)>, Option<std::path::PathBuf>, Option<String>)> {
     let juror_ballots = juror_ballots_from_stored(resp, &req.questions);
     let ws_path = match &req.state {
@@ -98,7 +99,7 @@ async fn rejudge(
         &memory_block,
         &juror_ballots,
         &resp.answers,
-        &resp.hung,
+        judge_keys,
         &crate::util::nonce(),
         ws_path.as_deref(),
     )
@@ -130,7 +131,7 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
             eprintln!("  {id}: would judge (hung: {})", resp.hung.join(", "));
             continue;
         }
-        match rejudge(ctx, store, &req, &resp).await {
+        match rejudge(ctx, store, &req, &resp, &resp.hung).await {
             Some((call, juror_ballots, ws_path, repo_id)) => {
                 let wrote = judge::commit_judge(
                     store,
@@ -139,6 +140,8 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
                     &call,
                     &resp.hung,
                     &juror_ballots,
+                    &resp.answers,
+                    ctx.config.hung_threshold,
                     repo_id.as_deref(),
                     ws_path.as_deref(),
                     &ctx.config.judge,
@@ -172,7 +175,10 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, dry_run: bool) -> Result<()>
             eprintln!("  {id}: would re-judge");
             continue;
         }
-        match rejudge(ctx, store, &req, &resp).await {
+        // Audit re-judges every question — including ones the jury had
+        // decided — so judge/jury conflicts can actually surface.
+        let all_keys: Vec<String> = req.questions.keys().cloned().collect();
+        match rejudge(ctx, store, &req, &resp, &all_keys).await {
             Some((call, juror_ballots, ws_path, repo_id)) => {
                 let keys = disagreed_keys(&call, &resp);
                 let wrote = judge::commit_judge(
@@ -182,11 +188,31 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, dry_run: bool) -> Result<()>
                     &call,
                     &keys,
                     &juror_ballots,
+                    &resp.answers,
+                    ctx.config.hung_threshold,
                     repo_id.as_deref(),
                     ws_path.as_deref(),
                     &ctx.config.judge,
                 )
                 .unwrap_or_default();
+                // Audit demote: active judge rulings on scopes where the judge
+                // just contradicted a decided jury majority taught the wrong
+                // lesson — move them to contested.
+                for key in
+                    judge::conflict_keys(&req, &call, &resp.answers, ctx.config.hung_threshold)
+                {
+                    if let Some(q) = req.questions.get(&key) {
+                        for e in store.rulings(&q.qid(), 100).unwrap_or_default() {
+                            if e.source == crate::memory::store::Source::Judge {
+                                let _ = store.set_status(
+                                    &e.id,
+                                    crate::memory::store::Status::Contested,
+                                    None,
+                                );
+                            }
+                        }
+                    }
+                }
                 if keys.is_empty() {
                     eprintln!("  {id}: judge agrees with jury");
                 } else {

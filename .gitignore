@@ -1,3 +1,3 @@
 /target
 # per-domain benchmark runtime state (memory db, cache, call logs)
-bench/*/home/
+bench/*/home*/
