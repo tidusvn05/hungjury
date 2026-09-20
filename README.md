@@ -182,6 +182,12 @@ hungjury memory resolve <entry-id> --accept       # contested → active (--reje
 # Học ngoài luồng: judge chấm lại các quyết định gần nhất thay vì chỉ hàng hung
 hungjury learn --audit --recent 20
 hungjury feedback <decision-id> --set dept=technical --note "label sai"
+
+# Soi rubric trước khi chạy (miễn phí, không tốn call)
+hungjury lint questions.json        # cảnh báo: level trừu tượng, boundary một chiều, criteria chồng lấn
+
+# Đo trên dữ liệu thật — nhiều seed một lệnh, memory db tạm (không đụng db thật)
+hungjury eval cases.jsonl --seeds 3 --label triage --audit-train 8
 ```
 
 Khi người hoặc audit phủ định một quyết định jury đã *decided* (không hung), các ruling/precedent do judge ghi cho câu hỏi đó bị đánh `contested` — vẫn xem được bằng `memory list --all` / `memory review`, không còn được inject vào prompt. Đây là guard chống memory lan truyền lỗi của judge (xem `docs/BENCHMARK.md`).

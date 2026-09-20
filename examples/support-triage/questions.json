@@ -19,7 +19,7 @@
     "id": "support.frustration",
     "instructions": "How frustrated the customer appears",
     "criteria": [
-      "Calm or neutral — purely factual, no annoyance markers at all",
+      "Calm or neutral — 'fyi', 'just checking in'; purely factual, no annoyance markers at all",
       "Mild annoyance or civil complaint ('a bit annoying', 'kind of a pain', 'would appreciate a fix') — no strong wording, no penalties named",
       "Strong wording ('ridiculous', 'unacceptable', 'beyond frustrated') OR names a penalty that lands if unresolved (chargeback, legal obligation, staff sitting idle, escalation threat). A deadline alone counts as urgency, not frustration"
     ]

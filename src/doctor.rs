@@ -122,6 +122,28 @@ pub async fn run(cfg: Option<&Config>, cfg_err: Option<&str>, json: bool) -> i32
                         "missing — precedent search disabled".to_string()
                     },
                 });
+                // Engagement: rulings only exist when escalation fired or
+                // `learn --audit` ran — a db full of jury decisions with
+                // zero rulings means memory can't add anything yet.
+                let decisions = s.decisions_len().unwrap_or(0);
+                let rulings = s
+                    .counts()
+                    .map(|v| {
+                        v.iter()
+                            .filter(|(k, st, _)| k == "ruling" && st == "active")
+                            .map(|(_, _, n)| *n)
+                            .sum::<i64>()
+                    })
+                    .unwrap_or(0);
+                checks.push(Check {
+                    name: "memory_engagement".to_string(),
+                    ok: !(decisions >= 20 && rulings == 0),
+                    detail: if decisions >= 20 && rulings == 0 {
+                        format!("{decisions} decisions but 0 rulings — escalation never fired; memory is inert. Run `learn --audit` to seed rulings")
+                    } else {
+                        format!("{decisions} decisions, {rulings} active rulings")
+                    },
+                });
             }
             Err(e) => checks.push(Check {
                 name: "memory_db".to_string(),

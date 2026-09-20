@@ -14,6 +14,7 @@ use hungjury::doctor;
 use hungjury::eval;
 use hungjury::jury::{self, DecideCtx};
 use hungjury::learn;
+use hungjury::lint;
 use hungjury::memory;
 use hungjury::memory::store::{Kind, Store};
 use hungjury::request::{Request, State};
@@ -118,6 +119,11 @@ enum Cmd {
         #[arg(long)]
         global: bool,
     },
+    /// Static checks on a questions file (rubric quality warnings).
+    Lint {
+        /// questions.json file to check.
+        questions: PathBuf,
+    },
 }
 
 #[derive(Args)]
@@ -188,15 +194,24 @@ struct EvalArgs {
     /// Fraction used for training (rest is test).
     #[arg(long, default_value = "0.5")]
     train_frac: f64,
-    /// Report output path.
-    #[arg(long, default_value = "report.json")]
-    report: PathBuf,
-    /// Shuffle seed (deterministic).
+    /// Report output path (default: `eval-<label>.json`, else report.json).
+    #[arg(long)]
+    report: Option<PathBuf>,
+    /// First shuffle seed (deterministic).
     #[arg(long, default_value = "1")]
     seed: u64,
+    /// How many consecutive seeds to run and aggregate (`--seeds 3`
+    /// runs seed, seed+1, seed+2). Each seed gets a throwaway memory db.
+    #[arg(long, default_value = "1")]
+    seeds: u64,
     /// Benchmark/domain label recorded in the report.
     #[arg(long)]
     label: Option<String>,
+    /// After the train pass, let the judge re-judge K jury-decided
+    /// train cases (learn --audit) so rulings exist even when the jury
+    /// never hangs.
+    #[arg(long, default_value = "0")]
+    audit_train: usize,
 }
 
 #[derive(Subcommand)]
@@ -364,14 +379,20 @@ async fn dispatch(
             hungjury::batch::run(&ctx, &args.cases, args.out.as_deref()).await
         }
         Cmd::Eval(args) => {
+            let report = args.report.clone().unwrap_or_else(|| match &args.label {
+                Some(l) => PathBuf::from(format!("eval-{l}.json")),
+                None => PathBuf::from("report.json"),
+            });
             eval::run(
                 &args.cases,
                 args.train_frac,
-                &args.report,
+                &report,
                 over,
                 cfg_path,
                 args.seed,
                 args.label.as_deref(),
+                args.seeds,
+                args.audit_train,
             )
             .await?;
             Ok(0)
@@ -385,6 +406,7 @@ async fn dispatch(
             }
         }
         Cmd::Init { dir, global } => cmd_init(dir, global),
+        Cmd::Lint { questions } => lint::run(&questions),
     }
 }
 
@@ -415,6 +437,30 @@ fn cmd_init(dir: Option<PathBuf>, global: bool) -> hungjury::error::Result<u8> {
 "#;
     const POLICY_SKEL: &str = "# Decision policy\n\nRules the jury and judge must apply when signals\nconflict — your labelling rubric, in order of precedence.\n\n## <question key>\n\n- <rule>\n";
     const GITIGNORE: &str = "# hungjury runtime state — never commit\nmemory*.db\ncache/\ncalls.jsonl\nstate.json\n";
+    // Anchored-rubric example: every level names its marker words AND
+    // what does not count — the two patterns evaluations showed matter.
+    const QUESTIONS_SKEL: &str = r#"{
+  "severity": {
+    "type": "score",
+    "id": "example.severity",
+    "instructions": "How severe the issue described in the state is",
+    "criteria": [
+      "Cosmetic or informational — 'minor', 'nit', 'fyi'; no user impact",
+      "Real but bounded impact — 'annoying', 'slow', 'sometimes fails'; a workaround exists",
+      "Blocking or damaging — 'broken', 'data loss', 'down', 'can't work'. A deadline or courtesy wording alone ('ASAP please') does NOT make it severe"
+    ]
+  },
+  "route": {
+    "type": "choice",
+    "id": "example.route",
+    "instructions": "Which team owns this item",
+    "criteria": {
+      "bugs": "Defects, crashes, errors — something built that behaves wrong",
+      "features": "Requests for new capability — 'can you add', 'is there a way to'; NOT reports of broken behavior"
+    }
+  }
+}
+"#;
 
     if global {
         let Some(cfg_dir) =
@@ -440,6 +486,7 @@ fn cmd_init(dir: Option<PathBuf>, global: bool) -> hungjury::error::Result<u8> {
     for (name, content) in [
         ("config.toml", CONFIG_SKEL),
         ("policy.md", POLICY_SKEL),
+        ("questions.json", QUESTIONS_SKEL),
         (".gitignore", GITIGNORE),
     ] {
         let path = hj.join(name);

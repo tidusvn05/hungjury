@@ -36,7 +36,7 @@ Q = {
         "id": "support.frustration",
         "instructions": "How frustrated the customer appears",
         "criteria": [
-            "Calm or neutral — purely factual, no annoyance markers at all",
+            "Calm or neutral — 'fyi', 'just checking in'; purely factual, no annoyance markers at all",
             "Mild annoyance or civil complaint ('a bit annoying', 'kind of a pain', 'would appreciate a fix') — no strong wording, no penalties named",
             "Strong wording ('ridiculous', 'unacceptable', 'beyond frustrated') OR names a penalty that lands if unresolved (chargeback, legal obligation, staff sitting idle, escalation threat). A deadline alone counts as urgency, not frustration",
         ],
@@ -132,6 +132,16 @@ for i in range(12):
     add(t.format(amt=rng.choice(["$60", "$210"])), "billing" if "charge" in t or "refund" in t.lower() else "technical",
         2, True)
 
+# ---------- E: information-free states (4) — every key should abstain -> hung ----------
+empty_states = [
+    "ok",
+    "(empty ticket — no message body)",
+    "test",
+    "following up",
+]
+for t in empty_states:
+    add(t, "hung", "hung", "hung")
+
 rng.shuffle(cases)
 with open("bench/adversarial/cases.jsonl", "w") as f:
     for c in cases:
@@ -139,5 +149,5 @@ with open("bench/adversarial/cases.jsonl", "w") as f:
 from collections import Counter
 print(f"wrote {len(cases)}")
 print(Counter(c["expected"]["department"] for c in cases))
-print("urgent:", sum(c["expected"]["is_urgent"] for c in cases),
+print("urgent:", sum(1 for c in cases if c["expected"]["is_urgent"] is True),
       "| frustration:", Counter(c["expected"]["frustration"] for c in cases))

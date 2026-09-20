@@ -31,6 +31,7 @@ use crate::request::Request;
 use crate::response::{AnswerOut, Response};
 
 /// One labeled eval case.
+#[derive(Clone)]
 struct Case {
     /// Rebuilt request (state + questions).
     req: Request,
@@ -127,6 +128,9 @@ struct ArmStats {
     mismatches: Vec<serde_json::Value>,
     /// Total rulings/precedents/facts injected into juror prompts.
     memory_injected: usize,
+    /// Per-question-key decided/correct — surfaces which question is
+    /// the weak axis (e.g. `frustration`) without reading mismatches.
+    per_key: BTreeMap<String, [usize; 2]>,
 }
 
 impl ArmStats {
@@ -196,12 +200,15 @@ fn score_response(
         note_calls(stats, &ju.model, 1);
     }
     for (key, want) in expected {
+        let k = stats.per_key.entry(key.clone()).or_default();
         // `"hung"` is a valid expectation: correct iff the key stayed
         // unresolved (hung or judge-abstained).
         if want.as_str() == Some("hung") {
             stats.decided += 1;
+            k[0] += 1;
             if resp.hung.contains(key) {
                 stats.correct += 1;
+                k[1] += 1;
             } else {
                 note_mismatch(stats, case, key, want, answerout_json(&resp.answers[key]));
             }
@@ -211,9 +218,12 @@ fn score_response(
             Some(true) => {
                 stats.decided += 1;
                 stats.correct += 1;
+                k[0] += 1;
+                k[1] += 1;
             }
             Some(false) => {
                 stats.decided += 1;
+                k[0] += 1;
                 note_mismatch(stats, case, key, want, answerout_json(&resp.answers[key]));
             }
             None => stats.hung += 1,
@@ -229,11 +239,14 @@ fn score_judge(
     expected: &BTreeMap<String, serde_json::Value>,
 ) {
     for (key, want) in expected {
+        let k = stats.per_key.entry(key.clone()).or_default();
         match call.judged.get(key) {
             Some(j) => {
                 stats.decided += 1;
+                k[0] += 1;
                 if ballot_matches(&j.ballot, want) {
                     stats.correct += 1;
+                    k[1] += 1;
                 } else {
                     note_mismatch(stats, case, key, want, j.ballot.to_json());
                 }
@@ -249,7 +262,10 @@ fn ctx_for(over: &CliOverrides, config_path: Option<&Path>) -> Result<DecideCtx>
     DecideCtx::new(cfg, None)
 }
 
-/// The full experiment. `seed` shuffles the split deterministically.
+/// The full experiment over `seeds` deterministic shuffles. Each seed
+/// runs against a throwaway memory db — the eval never pollutes the
+/// project's real rulings, and seeds can't leak rulings into each other.
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     cases_path: &Path,
     train_frac: f64,
@@ -258,13 +274,97 @@ pub async fn run(
     config_path: Option<&Path>,
     seed: u64,
     label: Option<&str>,
+    seeds: u64,
+    audit_train: usize,
 ) -> Result<()> {
-    let mut cases = load_cases(cases_path)?;
+    let cases = load_cases(cases_path)?;
+    let mut reports = Vec::new();
+    for s in seed..seed + seeds.max(1) {
+        let tmp = std::env::temp_dir().join(format!(
+            "hungjury-eval-{}-{s}.db",
+            crate::util::nonce()
+        ));
+        let mut over = base.clone();
+        over.memory_db = Some(tmp.clone());
+        let rep = run_seed(&cases, train_frac, &over, config_path, s, label, audit_train).await;
+        for suffix in ["", "-wal", "-shm", "-journal"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", tmp.display()));
+        }
+        reports.push((s, rep?));
+    }
+
+    let body = if reports.len() == 1 {
+        serde_json::to_string_pretty(&reports[0].1)
+    } else {
+        serde_json::to_string_pretty(&aggregate_report(label, &reports))
+    }
+    .map_err(|e| Error::Memory(e.to_string()))?;
+    crate::util::write_atomic(report_path, body.as_bytes())?;
+    eprintln!("eval: wrote {}", report_path.display());
+    println!("{body}");
+    Ok(())
+}
+
+/// Mean/min/max across seeds, per arm + go verdicts.
+fn aggregate_report(label: Option<&str>, reports: &[(u64, serde_json::Value)]) -> serde_json::Value {
+    let arms = ["jury", "jury_memory", "judge", "judge_informed"];
+    let mut agg_arms = serde_json::Map::new();
+    for arm in arms {
+        let accs: Vec<f64> = reports
+            .iter()
+            .filter_map(|(_, r)| r["arms"][arm]["accuracy"].as_f64())
+            .collect();
+        let injects: Vec<f64> = reports
+            .iter()
+            .filter_map(|(_, r)| r["arms"][arm]["memory_injected"].as_f64())
+            .collect();
+        let mean = accs.iter().sum::<f64>() / accs.len().max(1) as f64;
+        agg_arms.insert(
+            arm.to_string(),
+            serde_json::json!({
+                "accuracy_mean": mean,
+                "accuracy_min": accs.iter().cloned().fold(f64::INFINITY, f64::min),
+                "accuracy_max": accs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                "memory_injected_mean": injects.iter().sum::<f64>() / injects.len().max(1) as f64,
+            }),
+        );
+    }
+    let deltas: Vec<f64> = reports
+        .iter()
+        .filter_map(|(_, r)| r["go"]["memory_delta_vs_jury"].as_f64())
+        .collect();
+    let passes = reports
+        .iter()
+        .filter(|(_, r)| r["go"]["pass"].as_bool() == Some(true))
+        .count();
+    serde_json::json!({
+        "label": label,
+        "seeds_run": reports.len(),
+        "aggregate": {
+            "arms": agg_arms,
+            "memory_delta_vs_jury_mean": deltas.iter().sum::<f64>() / deltas.len().max(1) as f64,
+            "go_pass": format!("{passes}/{}", reports.len()),
+        },
+        "runs": reports.iter().map(|(s, r)| serde_json::json!({"seed": s, "report": r})).collect::<Vec<_>>(),
+    })
+}
+
+/// One seed: shuffle → train → four test arms → report JSON.
+async fn run_seed(
+    cases: &[Case],
+    train_frac: f64,
+    base: &CliOverrides,
+    config_path: Option<&Path>,
+    seed: u64,
+    label: Option<&str>,
+    audit_train: usize,
+) -> Result<serde_json::Value> {
+    let mut cases = cases.to_vec();
     shuffle(&mut cases, seed);
     let n = cases.len();
     let n_train = ((n as f64) * train_frac.clamp(0.0, 1.0)).round() as usize;
     let (train, test) = cases.split_at(n_train.min(n.saturating_sub(1)));
-    eprintln!("eval: {} cases — {} train, {} test", n, train.len(), test.len());
+    eprintln!("eval: seed {seed} — {} cases — {} train, {} test", n, train.len(), test.len());
 
     // Pass 1: train — `decide --escalate sync` populates memory.
     {
@@ -292,6 +392,11 @@ pub async fn run(
                 Ok(_) => eprintln!("  train {}/{} done", i + 1, train.len()),
                 Err(e) => eprintln!("  train {}/{} failed: {e}", i + 1, train.len()),
             }
+        }
+        // Optional: judge re-judges K of the just-written jury decisions —
+        // rulings exist even when the jury never hung (learn --audit).
+        if audit_train > 0 {
+            crate::learn::learn_audit(&ctx, audit_train, true, false).await?;
         }
     }
 
@@ -522,7 +627,7 @@ pub async fn run(
     };
 
     let report_cfg = Config::load(base, config_path)?;
-    let report = serde_json::json!({
+    Ok(serde_json::json!({
         "label": label,
         "cases": n,
         "train": train.len(),
@@ -549,12 +654,7 @@ pub async fn run(
             "hung_rate_drop": hung_drop,
             "pass": go,
         }
-    });
-    let body = serde_json::to_string_pretty(&report).map_err(|e| Error::Memory(e.to_string()))?;
-    crate::util::write_atomic(report_path, body.as_bytes())?;
-    eprintln!("eval: go={} — wrote {}", go, report_path.display());
-    println!("{body}");
-    Ok(())
+    }))
 }
 
 fn arm_json(s: &ArmStats) -> serde_json::Value {
@@ -583,6 +683,11 @@ fn arm_json(s: &ArmStats) -> serde_json::Value {
         "wall_ms_mean": mean,
         "wall_ms_p95": p95,
         "memory_injected": s.memory_injected,
+        "per_key": s.per_key.iter().map(|(k, v)| (k.clone(), serde_json::json!({
+            "decided": v[0],
+            "correct": v[1],
+            "accuracy": if v[0] == 0 { 0.0 } else { v[1] as f64 / v[0] as f64 },
+        }))).collect::<serde_json::Map<_, _>>(),
         "mismatches": s.mismatches,
     })
 }

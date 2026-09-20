@@ -1,0 +1,9 @@
+{
+  "name": "hungjury",
+  "version": "0.1.0",
+  "description": "Typed decisions from a jury of CLI agents — thin wrapper over the hungjury binary",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "engines": { "node": ">=18" },
+  "license": "Apache-2.0"
+}

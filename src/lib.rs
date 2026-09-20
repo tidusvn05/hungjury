@@ -14,6 +14,7 @@ pub mod eval;
 pub mod judge;
 pub mod jury;
 pub mod learn;
+pub mod lint;
 pub mod memory;
 pub mod prompt;
 pub mod question;

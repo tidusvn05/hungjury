@@ -709,3 +709,20 @@ mất config). Giờ:
    train pass 0 hung → 0 rulings → jury+mem ≡ jury (s8).
 5. Residual ~1-4% là label-boundary noise — dừng, không siết rubric
    thêm để tránh overfit generator.
+
+## 2026-09-20g — improvement plan implemented (9 items)
+
+- P0: `eval` report mặc định `eval-<label>.json`; `per_key` accuracy
+  per arm; `--seeds N` với throwaway memory db per seed + `aggregate`
+  report (mean/min/max, go_pass k/N) — eval không bao giờ đụng db thật.
+- P1: `hungjury lint` — heuristic rubric checks (abstract levels,
+  one-sided boundary, criteria overlap, noul no-exclusion); `init` ghi
+  thêm questions.json skeleton anchored (lint-clean).
+- P2: `eval --audit-train K` — learn_audit trên train decisions để
+  rulings tồn tại kể cả khi jury không hung; doctor `memory_engagement`
+  cảnh báo ≥20 decisions + 0 rulings.
+- P3: gen.py +4 hung-expect cases (64 total); `sdk/typescript/`
+  zero-dep (index.js + d.ts + package.json).
+- Fix kèm: eval_parallel test đọc quota thật → isolate HUNGJURY_HOME;
+  level-0 frustration thiếu markers (lint tự bắt chính mình).
+- Chi tiết: docs/REPORT-2026-09-20.md. 112 tests, clippy sạch.

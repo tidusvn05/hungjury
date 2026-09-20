@@ -11,6 +11,10 @@ use hungjury::config::{CliOverrides, Config};
 use hungjury::jury::{self, DecideCtx};
 use hungjury::request::Request;
 
+/// Serializes env-var mutation across parallel tests (same pattern as
+/// tests/project_dir.rs).
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn ctx_with_delay(ms: u64) -> DecideCtx {
     let over = CliOverrides {
         no_memory: true,
@@ -32,7 +36,23 @@ fn ctx_with_delay(ms: u64) -> DecideCtx {
 
 #[tokio::test]
 async fn cases_overlap_under_buffer_unordered() {
-    let ctx = ctx_with_delay(300);
+    // data_dir (and thus the quota file) resolves inside `ctx_with_delay`
+    // — point HUNGJURY_HOME at a throwaway dir so a full real-world
+    // quota can't starve the mock jurors.
+    let home = tempfile::tempdir().unwrap();
+    let ctx = {
+        let _g = ENV_LOCK.lock().unwrap();
+        let prev = std::env::var_os("HUNGJURY_HOME");
+        unsafe { std::env::set_var("HUNGJURY_HOME", home.path()) };
+        let ctx = ctx_with_delay(300);
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("HUNGJURY_HOME", v),
+                None => std::env::remove_var("HUNGJURY_HOME"),
+            }
+        }
+        ctx
+    };
     let par = 8usize;
     let cases: Vec<Request> = (0..8)
         .map(|_| {
