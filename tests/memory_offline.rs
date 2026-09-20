@@ -33,7 +33,7 @@ fn ctx_with(config: Config, backend: MockBackend) -> DecideCtx {
 fn ruling(store: &Store, qid: &str, text: &str) -> String {
     let e = NewEntry {
         kind: Kind::Ruling,
-        scope: q_scope(qid),
+        scope: q_scope(None, qid),
         body: serde_json::json!({"text": text}),
         text: text.to_string(),
         source: Source::Judge,
@@ -47,7 +47,7 @@ fn ruling(store: &Store, qid: &str, text: &str) -> String {
 fn precedent(store: &Store, qid: &str, digest: &str, verdict: &str) -> String {
     let e = NewEntry {
         kind: Kind::Precedent,
-        scope: q_scope(qid),
+        scope: q_scope(None, qid),
         body: serde_json::json!({
             "state_excerpt": format!("excerpt {digest}"),
             "state_digest": digest,
@@ -71,7 +71,7 @@ fn forget_tombstones_and_blocks_resurrection() {
     // Re-inserting the same content must not resurrect.
     let e = NewEntry {
         kind: Kind::Ruling,
-        scope: q_scope("q1"),
+        scope: q_scope(None, "q1"),
         body: serde_json::json!({"text": "rule one"}),
         text: "rule one".to_string(),
         source: Source::Imported,
@@ -82,7 +82,7 @@ fn forget_tombstones_and_blocks_resurrection() {
     let (id2, inserted) = store.insert(&e).unwrap();
     assert_eq!(id, id2);
     assert!(!inserted);
-    assert!(store.rulings("q1", 10).unwrap().is_empty());
+    assert!(store.rulings(None, "q1", 10).unwrap().is_empty());
 }
 
 #[test]
@@ -153,7 +153,7 @@ fn trust_factor_scales_imports() {
     bundle::export(&remote, &path, None, false).unwrap();
     let local = Store::open_memory().unwrap();
     bundle::import(&local, &path, 0.5, false).unwrap();
-    let rs = local.rulings("q1", 10).unwrap();
+    let rs = local.rulings(None, "q1", 10).unwrap();
     assert!((rs[0].trust - 0.4).abs() < 1e-9);
     assert_eq!(rs[0].source, Source::Imported);
 }
@@ -168,7 +168,7 @@ fn dry_run_import_writes_nothing() {
     let local = Store::open_memory().unwrap();
     let r = bundle::import(&local, &path, 1.0, true).unwrap();
     assert_eq!(r.new, 1);
-    assert!(local.rulings("q1", 10).unwrap().is_empty());
+    assert!(local.rulings(None, "q1", 10).unwrap().is_empty());
 }
 
 /// Non-git dir → `sha256(path)` repo id; fact evidence hash drift → stale.
@@ -182,7 +182,7 @@ fn workspace_fact_staleness() {
     let evidence = ws::evidence_for(dir.path(), std::slice::from_ref(&f));
     let e = NewEntry {
         kind: Kind::Fact,
-        scope: hungjury::memory::store::ws_scope(&repo),
+        scope: hungjury::memory::store::ws_scope(None, &repo),
         body: serde_json::json!({"text": "evidence is v1", "evidence": evidence, "commit": ""}),
         text: "evidence is v1".to_string(),
         source: Source::Judge,
@@ -192,11 +192,11 @@ fn workspace_fact_staleness() {
     };
     let id = store.insert(&e).unwrap().0;
     // Fresh: fact verifies.
-    let good = ws::verify_facts(&store, dir.path(), &repo).unwrap();
+    let good = ws::verify_facts(&store, dir.path(), None, &repo).unwrap();
     assert_eq!(good.len(), 1);
     // Drift: mark stale + excluded.
     std::fs::write(&f, "v2 CHANGED").unwrap();
-    let good = ws::verify_facts(&store, dir.path(), &repo).unwrap();
+    let good = ws::verify_facts(&store, dir.path(), None, &repo).unwrap();
     assert!(good.is_empty());
     assert_eq!(store.get(&id).unwrap().unwrap().status, Status::Stale);
 }
@@ -241,7 +241,7 @@ async fn learn_queue_judges_hung() {
     learn::learn_queue(&ctx, false).await.unwrap();
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
     assert_eq!(store.queue_len().unwrap(), 0);
-    assert_eq!(store.all_rulings("support.dept").unwrap().len(), 1);
+    assert_eq!(store.all_rulings(&q_scope(None, "support.dept")).unwrap().len(), 1);
     let precs = store.list(Some(Kind::Precedent), None, true).unwrap();
     assert_eq!(precs.len(), 1); // one per hung key
     // Both jurors got stat'd against the judge verdict.
@@ -300,8 +300,8 @@ async fn judge_override_of_decided_jury_marks_contested() {
     assert_eq!(dept_ruling.status, Status::Contested); // overrode decided jury
     assert_eq!(urg_ruling.status, Status::Active); // hung jury — escalation's job
     // Contested rulings are excluded from retrieval.
-    assert!(store.rulings("support.dept", 10).unwrap().is_empty());
-    assert_eq!(store.rulings("support.urgent", 10).unwrap().len(), 1);
+    assert!(store.rulings(None, "support.dept", 10).unwrap().is_empty());
+    assert_eq!(store.rulings(None, "support.urgent", 10).unwrap().len(), 1);
 }
 
 /// Same path but judge agrees with the jury → ruling stays active.
@@ -339,7 +339,7 @@ async fn judge_agreement_keeps_ruling_active() {
     let _ = decide(&ctx, &req).await.unwrap();
 
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
-    let act = store.rulings("support.dept", 10).unwrap();
+    let act = store.rulings(None, "support.dept", 10).unwrap();
     assert_eq!(act.len(), 1);
     assert_eq!(act[0].status, Status::Active);
 }
@@ -435,7 +435,7 @@ async fn consolidate_supersedes_old_rulings() {
     c.memory.max_rulings = 4;
     let ctx = ctx_with(c, backend);
     learn::learn_consolidate(&ctx, false).await.unwrap();
-    let active = store.all_rulings("support.dept").unwrap();
+    let active = store.all_rulings(&q_scope(None, "support.dept")).unwrap();
     assert_eq!(active.len(), 2);
     assert_eq!(active[0].body["text"], "merged rule A");
     let all = store.list(Some(Kind::Ruling), None, false).unwrap();
@@ -469,7 +469,7 @@ async fn feedback_contradiction_demotes_judge_rulings() {
     // A human-authored ruling on the same scope must never be demoted.
     let he = NewEntry {
         kind: Kind::Ruling,
-        scope: q_scope("support.dept"),
+        scope: q_scope(None, "support.dept"),
         body: serde_json::json!({"text": "human rule"}),
         text: "human rule".to_string(),
         source: Source::Human,
@@ -651,7 +651,7 @@ async fn escalation_rulings_are_provisional() {
     assert_eq!(resp.decided_by, hungjury::response::DecidedBy::Judge);
 
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
-    let rs = store.rulings("support.urgent", 10).unwrap();
+    let rs = store.rulings(None, "support.urgent", 10).unwrap();
     assert_eq!(rs.len(), 1);
     assert_eq!(rs[0].status, Status::Active); // provisional ≠ contested
     assert!((rs[0].trust - 0.4).abs() < 1e-9); // provisional, not 0.8
@@ -706,7 +706,7 @@ async fn judge_supersedes_retires_old_ruling() {
     let old_e = store.get(&old).unwrap().unwrap();
     assert_eq!(old_e.status, Status::Superseded);
     assert!(old_e.superseded_by.is_some());
-    let active = store.rulings("support.dept", 10).unwrap();
+    let active = store.rulings(None, "support.dept", 10).unwrap();
     assert_eq!(active.len(), 1);
     assert!(active[0].text.contains("refunds"));
 }
@@ -744,13 +744,13 @@ async fn feedback_confirmation_promotes_provisional_rulings() {
     let (resp, _) = decide(&ctx, &req).await.unwrap();
 
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
-    let r = store.rulings("support.urgent", 10).unwrap();
+    let r = store.rulings(None, "support.urgent", 10).unwrap();
     assert_eq!(r.len(), 1);
     assert!((r[0].trust - 0.4).abs() < 1e-9); // provisional
 
     // Human agrees with the judge verdict (urgent=true) → promote.
     learn::feedback(&ctx, &resp.id, &[("urgent".into(), "true".into())], None).unwrap();
-    let r = store.rulings("support.urgent", 10).unwrap();
+    let r = store.rulings(None, "support.urgent", 10).unwrap();
     assert!((r[0].trust - 0.8).abs() < 1e-9);
 }
 
@@ -775,7 +775,7 @@ fn promote_leaves_non_judge_rulings_alone() {
     let provisional = {
         let e = NewEntry {
             kind: Kind::Ruling,
-            scope: q_scope("q1"),
+            scope: q_scope(None, "q1"),
             body: serde_json::json!({"text": "provisional lesson"}),
             text: "provisional lesson".to_string(),
             source: Source::Judge,
@@ -788,7 +788,7 @@ fn promote_leaves_non_judge_rulings_alone() {
     let imported = {
         let e = NewEntry {
             kind: Kind::Ruling,
-            scope: q_scope("q1"),
+            scope: q_scope(None, "q1"),
             body: serde_json::json!({"text": "imported lesson"}),
             text: "imported lesson".to_string(),
             source: Source::Imported,
@@ -798,7 +798,7 @@ fn promote_leaves_non_judge_rulings_alone() {
         };
         store.insert(&e).unwrap().0
     };
-    assert_eq!(store.promote_rulings(&q_scope("q1"), 0.8).unwrap(), 1);
+    assert_eq!(store.promote_rulings(&q_scope(None, "q1"), 0.8).unwrap(), 1);
     assert!((store.get(&provisional).unwrap().unwrap().trust - 0.8).abs() < 1e-9);
     assert!((store.get(&imported).unwrap().unwrap().trust - 0.4).abs() < 1e-9);
 }

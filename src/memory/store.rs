@@ -275,14 +275,21 @@ impl NewEntry {
     }
 }
 
-/// Scope helpers.
-pub fn q_scope(qid: &str) -> String {
-    format!("q:{qid}")
+/// Scope helpers — `ns` prefixes the scope (`triage` + `q:x` →
+/// `triage:q:x`); `None` keeps the bare `q:`/`ws:` forms.
+pub fn q_scope(ns: Option<&str>, qid: &str) -> String {
+    match ns {
+        Some(n) if !n.is_empty() => format!("{n}:q:{qid}"),
+        _ => format!("q:{qid}"),
+    }
 }
 
 /// Scope helpers.
-pub fn ws_scope(repo_id: &str) -> String {
-    format!("ws:{repo_id}")
+pub fn ws_scope(ns: Option<&str>, repo_id: &str) -> String {
+    match ns {
+        Some(n) if !n.is_empty() => format!("{n}:ws:{repo_id}"),
+        _ => format!("ws:{repo_id}"),
+    }
 }
 
 /// The store — wraps a `Mutex<Connection>` so `&Store` is `Sync`.
@@ -434,7 +441,7 @@ impl Store {
     }
 
     /// Active rulings for `q:<qid>`, trust desc, capped.
-    pub fn rulings(&self, qid: &str, limit: usize) -> Result<Vec<Entry>> {
+    pub fn rulings(&self, ns: Option<&str>, qid: &str, limit: usize) -> Result<Vec<Entry>> {
         self.select_entries(
             "SELECT id, kind, scope, body, text, source, trust, author, origin,
                     created_at, status, superseded_by
@@ -442,24 +449,25 @@ impl Store {
              WHERE scope = ?1 AND kind = 'ruling' AND status = 'active'
              ORDER BY trust DESC, created_at ASC
              LIMIT ?2",
-            params![q_scope(qid), limit as i64],
+            params![q_scope(ns, qid), limit as i64],
         )
     }
 
     /// ALL active rulings for a scope (no limit — for consolidate/bundle).
-    pub fn all_rulings(&self, qid: &str) -> Result<Vec<Entry>> {
+    /// Takes the scope verbatim so namespaced scopes work unchanged.
+    pub fn all_rulings(&self, scope: &str) -> Result<Vec<Entry>> {
         self.select_entries(
             "SELECT id, kind, scope, body, text, source, trust, author, origin,
                     created_at, status, superseded_by
              FROM entries
              WHERE scope = ?1 AND kind = 'ruling' AND status = 'active'
              ORDER BY trust DESC, created_at ASC",
-            params![q_scope(qid)],
+            params![scope],
         )
     }
 
     /// FTS5 BM25 precedents for `q:<qid>` matching `fts_query`, top `k`.
-    pub fn precedents(&self, qid: &str, fts_query: &str, k: usize) -> Result<Vec<Entry>> {
+    pub fn precedents(&self, ns: Option<&str>, qid: &str, fts_query: &str, k: usize) -> Result<Vec<Entry>> {
         if fts_query.trim().is_empty() {
             return Ok(vec![]);
         }
@@ -472,19 +480,19 @@ impl Store {
                AND entries_fts MATCH ?2
              ORDER BY bm25(entries_fts)
              LIMIT ?3",
-            params![q_scope(qid), fts_query, k as i64],
+            params![q_scope(ns, qid), fts_query, k as i64],
         )
     }
 
     /// Active facts for `ws:<repo_id>`.
-    pub fn facts(&self, repo_id: &str) -> Result<Vec<Entry>> {
+    pub fn facts(&self, ns: Option<&str>, repo_id: &str) -> Result<Vec<Entry>> {
         self.select_entries(
             "SELECT id, kind, scope, body, text, source, trust, author, origin,
                     created_at, status, superseded_by
              FROM entries
              WHERE scope = ?1 AND kind = 'fact' AND status = 'active'
              ORDER BY trust DESC, created_at ASC",
-            params![ws_scope(repo_id)],
+            params![ws_scope(ns, repo_id)],
         )
     }
 
@@ -959,6 +967,31 @@ impl Store {
                 .map_err(|e| Error::Memory(e.to_string()))?;
             rows.collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|e| Error::Memory(e.to_string()))
+        })
+    }
+
+    /// Distinct namespaces seen in entry scopes — the prefix before a
+    /// `q:`/`ws:` marker. Empty-string bucket = un-namespaced entries.
+    pub fn namespaces(&self) -> Result<Vec<(String, i64)>> {
+        self.with_conn(|c| {
+            let mut st = c
+                .prepare("SELECT scope, count(*) FROM entries GROUP BY scope")
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let rows = st
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let mut by_ns: std::collections::BTreeMap<String, i64> =
+                std::collections::BTreeMap::new();
+            for r in rows {
+                let (scope, n) = r.map_err(|e| Error::Memory(e.to_string()))?;
+                let ns = scope
+                    .find(":q:")
+                    .map(|i| &scope[..i])
+                    .or_else(|| scope.find(":ws:").map(|i| &scope[..i]))
+                    .unwrap_or("");
+                *by_ns.entry(ns.to_string()).or_default() += n;
+            }
+            Ok(by_ns.into_iter().collect())
         })
     }
 

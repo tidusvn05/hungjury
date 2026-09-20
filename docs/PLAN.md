@@ -584,3 +584,35 @@ Polish tiếp theo:
 - `memory show|resolve|forget` nhận id prefix ≥4 ký tự không nhập
   nhằng (`resolve_entry_id` — full id trước, prefix sau), đồng nhất
   với format `[id:…]` mà judge thấy trong prompt.
+
+### `.hungjury/` project dirs + tách memory theo mục đích (2026-09-19)
+
+Trước đây mọi lệnh dùng chung `~/.local/share/hungjury` — project nào
+cũng share memory, và `./hungjury.toml` chỉ đọc ở cwd (chạy từ subdir
+mất config). Giờ:
+
+- **`discover_project` walk-up** (giống `.git`): từ cwd đi lên, `.hungjury/`
+  gần nhất làm project root — `data_dir` trỏ vào đó (memory.db, cache/,
+  calls.jsonl, state.json đều local). `hungjury.toml` hoặc
+  `.hungjury/config.toml` walk-up độc lập cho config layer. `hungjury.toml`
+  không kèm `.hungjury/` ⇒ chỉ nạp config, memory vẫn global.
+- Precedence: `--memory-db` > `$HUNGJURY_HOME` > `.hungjury/` > global.
+- **`hungjury init [--dir]`** scaffold `.hungjury/{config.toml,
+  policy.md,.gitignore}` — idempotent, không ghi đè; `--global` viết
+  `~/.config/hungjury/config.toml`.
+- **Path trong TOML resolve theo thư mục chứa toml** (policy_file,
+  prompts_dir, memory_db — kể cả trong `[profiles.X]`): fix cho walk-up
+  khi cwd ≠ project root.
+- **Auto-detect**: `.hungjury/policy.md` và `.hungjury/prompts/` được
+  nhặt tự động khi config/CLI chưa set.
+- **Tách mục đích 2 cấp**: `[profiles.X] memory_db=…` (db riêng, resolve
+  theo toml dir) + `namespace = "triage"` / `--namespace` (scope prefix
+  `triage:q:<qid>` trong cùng db; `memory stats` có breakdown
+  `namespaces`).
+- `doctor` báo `project` root + `policy` đã resolve + `namespace`.
+- SDK: `decide(..., cwd=…, namespace=…)` — cwd để discovery hoạt động.
+
+Đổi signature: `q_scope(ns, qid)`, `ws_scope(ns, repo)`,
+`retrieve(..., ns, facts)`, `verify_facts(store, ws, ns, repo)`,
+`commit_judge(..., ns, ...)`, `all_rulings(scope)` (nhận scope verbatim
+— consolidate đi theo scope thực, không tự build lại).

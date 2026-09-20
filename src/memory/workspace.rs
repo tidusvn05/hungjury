@@ -82,8 +82,13 @@ fn file_sha256(path: &Path) -> Option<String> {
 /// Re-check every active fact's evidence files against the workspace.
 /// A fact whose evidence hash drifted becomes `stale` and is excluded
 /// from what this call returns.
-pub fn verify_facts(store: &Store, ws: &Path, repo_id: &str) -> Result<Vec<Entry>> {
-    let facts = store.facts(repo_id)?;
+pub fn verify_facts(
+    store: &Store,
+    ws: &Path,
+    ns: Option<&str>,
+    repo_id: &str,
+) -> Result<Vec<Entry>> {
+    let facts = store.facts(ns, repo_id)?;
     let mut good = Vec::new();
     for f in facts {
         let evidence_ok = f.body["evidence"]

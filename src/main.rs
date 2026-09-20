@@ -79,6 +79,9 @@ struct Global {
     /// Memory db path.
     #[arg(long, global = true)]
     memory_db: Option<PathBuf>,
+    /// Memory namespace — soft-partition scopes as `ns:q:<qid>`.
+    #[arg(long, global = true)]
+    namespace: Option<String>,
     /// Verbosity (-v info, -vv debug).
     #[arg(short = 'v', long, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
@@ -106,6 +109,14 @@ enum Cmd {
         /// Machine-readable output.
         #[arg(long)]
         json: bool,
+    },
+    /// Scaffold a `.hungjury/` project dir (config, policy, .gitignore).
+    Init {
+        /// Directory to initialize (default: cwd).
+        dir: Option<PathBuf>,
+        /// Write `~/.config/hungjury/config.toml` instead of a project dir.
+        #[arg(long)]
+        global: bool,
     },
 }
 
@@ -373,7 +384,74 @@ async fn dispatch(
                 Err(e) => Ok(doctor::run(None, Some(&e.to_string()), json).await as u8),
             }
         }
+        Cmd::Init { dir, global } => cmd_init(dir, global),
     }
+}
+
+/// `hungjury init` — scaffold `.hungjury/` (or the global config with
+/// `--global`). Never overwrites existing files.
+fn cmd_init(dir: Option<PathBuf>, global: bool) -> hungjury::error::Result<u8> {
+    const CONFIG_SKEL: &str = r#"# hungjury project config — merge order: global ~/.config/hungjury/config.toml
+# → this file → --profile → CLI flags.
+
+# jurors = ["claude:haiku", "codex:gpt-5.6-terra@low", "devin:swe-2-medium"]
+# judge = "claude:opus@high"
+# escalate = "sync"        # sync | queue | off
+# hung_threshold = 0.5
+# min_quorum = 2
+# policy_file = "policy.md"   # resolved relative to this dir (auto-detected anyway)
+# namespace = "triage"        # soft-partition memory scopes as triage:q:<qid>
+
+# Hard-isolated purpose: a profile gets its own memory db.
+# [profiles.review]
+# jurors = ["codex:gpt-5.6-terra@low"]
+# memory_db = "memory-review.db"   # → .hungjury/memory-review.db
+# policy_file = "policy-review.md"
+
+# [costs]
+# claude = 0.08
+# codex = 0.05
+# devin = 0.05
+"#;
+    const POLICY_SKEL: &str = "# Decision policy\n\nRules the jury and judge must apply when signals\nconflict — your labelling rubric, in order of precedence.\n\n## <question key>\n\n- <rule>\n";
+    const GITIGNORE: &str = "# hungjury runtime state — never commit\nmemory*.db\ncache/\ncalls.jsonl\nstate.json\n";
+
+    if global {
+        let Some(cfg_dir) =
+            directories::ProjectDirs::from("", "", "hungjury").map(|p| p.config_dir().to_path_buf())
+        else {
+            eprintln!("init: cannot resolve config dir");
+            return Ok(1);
+        };
+        std::fs::create_dir_all(&cfg_dir).map_err(|e| hungjury::error::Error::io(&cfg_dir, e))?;
+        let path = cfg_dir.join("config.toml");
+        if path.exists() {
+            println!("exists: {}", path.display());
+        } else {
+            std::fs::write(&path, CONFIG_SKEL).map_err(|e| hungjury::error::Error::io(&path, e))?;
+            println!("created: {}", path.display());
+        }
+        return Ok(0);
+    }
+
+    let root = dir.unwrap_or_else(|| PathBuf::from("."));
+    let hj = root.join(".hungjury");
+    std::fs::create_dir_all(&hj).map_err(|e| hungjury::error::Error::io(&hj, e))?;
+    for (name, content) in [
+        ("config.toml", CONFIG_SKEL),
+        ("policy.md", POLICY_SKEL),
+        (".gitignore", GITIGNORE),
+    ] {
+        let path = hj.join(name);
+        if path.exists() {
+            println!("exists:  {}", path.display());
+        } else {
+            std::fs::write(&path, content).map_err(|e| hungjury::error::Error::io(&path, e))?;
+            println!("created: {}", path.display());
+        }
+    }
+    eprintln!("hungjury: project dir ready — edit .hungjury/config.toml and policy.md");
+    Ok(0)
 }
 
 /// `Config` + `DecideCtx` for commands that need backends/memory.
@@ -573,6 +651,9 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
                 "by_source": store.source_counts()?.iter().map(|(s, n)| serde_json::json!({
                     "source": s, "n": n,
                 })).collect::<Vec<_>>(),
+                "namespaces": store.namespaces()?.iter().map(|(s, n)| serde_json::json!({
+                    "namespace": if s.is_empty() { "(default)" } else { s }, "n": n,
+                })).collect::<Vec<_>>(),
                 "decisions": store.decisions_len()?,
                 "queue_pending": store.queue_len()?,
                 "cache_entries": hungjury::cache::Cache::new(
@@ -661,6 +742,7 @@ fn overrides(g: &Global) -> CliOverrides {
         policy_file: g.policy_file.clone(),
         memory_db: g.memory_db.clone(),
         profile: g.profile.clone(),
+        namespace: g.namespace.clone(),
     }
 }
 

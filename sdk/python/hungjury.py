@@ -52,10 +52,12 @@ def decide(
     escalate: Optional[str] = None,
     hung_threshold: Optional[float] = None,
     policy_file: Optional[str] = None,
+    namespace: Optional[str] = None,
     workspace: Optional[str] = None,
     hint: Optional[str] = None,
     extra_args: Sequence[str] = (),
     bin: str = "hungjury",
+    cwd: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> Decision:
     """Run one decision.
@@ -63,6 +65,10 @@ def decide(
     `state` is a plain string (text case) — or pass `workspace=` +
     `hint=` for a repository state. `questions` maps key →
     `{"type": "choice"|"score"|"noul", ...}` as in the CLI request JSON.
+
+    `cwd` sets the subprocess working directory — hungjury walks up
+    from it looking for `.hungjury/` (project config, policy, memory),
+    so pass your project dir to pick up project memory.
     """
     if workspace is not None:
         state_field: Any = {"workspace": workspace, "hint": hint}
@@ -81,6 +87,8 @@ def decide(
         args += ["--hung-threshold", str(hung_threshold)]
     if policy_file is not None:
         args += ["--policy-file", policy_file]
+    if namespace is not None:
+        args += ["--namespace", namespace]
     args += list(extra_args)
     args += ["decide", "-"]
 
@@ -89,6 +97,7 @@ def decide(
         input=json.dumps(request),
         capture_output=True,
         text=True,
+        cwd=cwd,
         timeout=timeout,
     )
     # Exit 2 is a valid hung response — stdout still carries the JSON.
@@ -117,6 +126,7 @@ def feedback(
     *,
     note: Optional[str] = None,
     bin: str = "hungjury",
+    cwd: Optional[str] = None,
 ) -> dict[str, Any]:
     """Attach a human verdict to a past decision (`hungjury feedback`)."""
     args = [bin, "feedback", decision_id]
@@ -124,7 +134,7 @@ def feedback(
         args += ["--set", f"{k}={json.dumps(v)}"]
     if note:
         args += ["--note", note]
-    proc = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
     if proc.returncode != 0:
         raise HungjuryError(proc.stderr.strip() or f"exit {proc.returncode}")
     return json.loads(proc.stdout)

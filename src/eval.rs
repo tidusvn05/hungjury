@@ -349,7 +349,7 @@ pub async fn run(
                     let hung: Vec<String> = c.req.questions.keys().cloned().collect();
                     let memory_block = match &ctx.store {
                         Some(s) => {
-                            crate::memory::retrieve::retrieve(s, &c.req, &ctx.config.memory, None)
+                            crate::memory::retrieve::retrieve(s, &c.req, &ctx.config.memory, ctx.config.namespace.as_deref(), None)
                                 .map(|r| r.block)
                                 .unwrap_or_default()
                         }
@@ -416,6 +416,7 @@ pub async fn run(
                                 s,
                                 &c.req,
                                 &ctx.config.memory,
+                                ctx.config.namespace.as_deref(),
                                 None,
                             )
                             .map(|r| r.block)

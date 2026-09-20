@@ -102,10 +102,10 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     let mut scopes: Vec<String> = req
         .questions
         .values()
-        .map(|q| crate::memory::store::q_scope(&q.qid()))
+        .map(|q| crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()))
         .collect();
     if let Some(r) = &repo_id {
-        scopes.push(crate::memory::store::ws_scope(r));
+        scopes.push(crate::memory::store::ws_scope(ctx.config.namespace.as_deref(), r));
     }
 
     // 0. Exact-match cache.
@@ -286,6 +286,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                             &answers,
                             ctx.config.hung_threshold,
                             ctx.config.memory.provisional_trust,
+                            ctx.config.namespace.as_deref(),
                             repo_id.as_deref(),
                             ws_path.as_deref(),
                             &ctx.config.judge,
@@ -413,10 +414,12 @@ fn retrieve_memory(
         return Ok(empty);
     };
     let facts = match (repo_id, ws_path) {
-        (Some(r), Some(p)) => Some(workspace::verify_facts(store, p, r)?),
+        (Some(r), Some(p)) => {
+                Some(workspace::verify_facts(store, p, ctx.config.namespace.as_deref(), r)?)
+            }
         _ => None,
     };
-    retrieve::retrieve(store, req, &ctx.config.memory, facts)
+    retrieve::retrieve(store, req, &ctx.config.memory, ctx.config.namespace.as_deref(), facts)
 }
 
 /// The short system prompt — full contract lives in the user message.

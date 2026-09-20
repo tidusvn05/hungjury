@@ -366,6 +366,7 @@ pub fn commit_judge(
     answers: &BTreeMap<String, AnswerOut>,
     hung_threshold: f64,
     provisional_trust: f64,
+    namespace: Option<&str>,
     repo_id: Option<&str>,
     ws_path: Option<&Path>,
     judge_str: &str,
@@ -400,7 +401,7 @@ pub fn commit_judge(
                 .is_some();
             let e = NewEntry {
                 kind: Kind::Ruling,
-                scope: crate::memory::store::q_scope(&q.qid()),
+                scope: crate::memory::store::q_scope(namespace, &q.qid()),
                 body: serde_json::json!({
                     "text": text,
                     "question": {"type": q.kind_str(), "instructions": q.instructions()},
@@ -453,7 +454,7 @@ pub fn commit_judge(
         };
         let e = NewEntry {
             kind: Kind::Precedent,
-            scope: crate::memory::store::q_scope(&q.qid()),
+            scope: crate::memory::store::q_scope(namespace, &q.qid()),
             body: serde_json::json!({
                 "state_excerpt": excerpt,
                 "state_digest": digest,
@@ -498,7 +499,7 @@ pub fn commit_judge(
             let evidence = ws::evidence_for(path, &paths);
             let e = NewEntry {
                 kind: Kind::Fact,
-                scope: crate::memory::store::ws_scope(repo),
+                scope: crate::memory::store::ws_scope(namespace, repo),
                 body: serde_json::json!({
                     "text": text,
                     "evidence": evidence,

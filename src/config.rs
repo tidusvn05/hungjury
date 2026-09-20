@@ -144,6 +144,12 @@ pub struct Config {
     pub memory: MemoryConfig,
     /// Name of the applied profile, if any.
     pub profile: Option<String>,
+    /// Soft memory partition — scope prefix (`ns:q:<qid>`). `None`
+    /// keeps today's `q:`/`ws:` scopes.
+    pub namespace: Option<String>,
+    /// Directory containing the discovered `.hungjury/` (or walked
+    /// `hungjury.toml`). `None` when running without a project.
+    pub project_root: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -168,6 +174,8 @@ impl Default for Config {
             limits: LimitsConfig::default(),
             memory: MemoryConfig::default(),
             profile: None,
+            namespace: None,
+            project_root: None,
         }
     }
 }
@@ -180,6 +188,46 @@ fn default_data_dir() -> PathBuf {
     directories::ProjectDirs::from("", "", "hungjury")
         .map(|p| p.data_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from(".hungjury"))
+}
+
+/// What a walk-up from the working directory found.
+#[derive(Debug, Default, Clone)]
+pub struct ProjectDir {
+    /// Nearest ancestor containing `.hungjury/` — its parent is the
+    /// project root and the dir itself becomes `data_dir`.
+    pub hungjury_dir: Option<PathBuf>,
+    /// Nearest `.hungjury/config.toml` or `hungjury.toml` — the project
+    /// config layer (may sit at a different level than `hungjury_dir`).
+    pub toml: Option<PathBuf>,
+}
+
+/// Walk ancestors of `start` for `.hungjury/` and `hungjury.toml` —
+/// git-style: the nearest hit wins each, independently.
+pub fn discover_project(start: &Path) -> ProjectDir {
+    let mut found = ProjectDir::default();
+    for dir in start.ancestors() {
+        if found.hungjury_dir.is_none() {
+            let d = dir.join(".hungjury");
+            if d.is_dir() {
+                found.hungjury_dir = Some(d);
+            }
+        }
+        if found.toml.is_none() {
+            let nested = dir.join(".hungjury/config.toml");
+            let flat = dir.join("hungjury.toml");
+            found.toml = if nested.is_file() {
+                Some(nested)
+            } else if flat.is_file() {
+                Some(flat)
+            } else {
+                None
+            };
+        }
+        if found.hungjury_dir.is_some() && found.toml.is_some() {
+            break;
+        }
+    }
+    found
 }
 
 /// Optional TOML file shape — every field optional, merged over defaults.
@@ -195,6 +243,11 @@ struct TomlConfig {
     min_quorum: Option<usize>,
     prompts_dir: Option<PathBuf>,
     policy_file: Option<PathBuf>,
+    /// Soft memory partition (scope prefix `ns:q:<qid>`).
+    namespace: Option<String>,
+    /// Per-purpose db path — relative paths resolve against the
+    /// directory holding the toml that declared them.
+    memory_db: Option<PathBuf>,
     /// `[costs]` — backend name → USD per call.
     costs: Option<std::collections::BTreeMap<String, f64>>,
     limits: Option<LimitsPartial>,
@@ -259,42 +312,78 @@ pub struct CliOverrides {
     pub memory_db: Option<PathBuf>,
     /// `--profile`
     pub profile: Option<String>,
+    /// `--namespace`
+    pub namespace: Option<String>,
 }
 
 impl Config {
     /// Merge order: defaults → global config → project `hungjury.toml` →
     /// profile → CLI flags → PATH auto-detection for jurors/judge nobody set.
     pub fn load(cli: &CliOverrides, config_path: Option<&Path>) -> Result<Config> {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::load_at(cli, config_path, &cwd)
+    }
+
+    /// `load` with an explicit working directory — tests + callers that
+    /// already resolved their cwd.
+    pub fn load_at(
+        cli: &CliOverrides,
+        config_path: Option<&Path>,
+        start: &Path,
+    ) -> Result<Config> {
+        // Walk-up discovery: `.hungjury/` anchors project-local state;
+        // `hungjury.toml`/`.hungjury/config.toml` is the project config
+        // layer. Either may sit at any ancestor — nearest wins.
+        let proj = discover_project(start);
         let mut cfg = Config::default();
+        if std::env::var_os("HUNGJURY_HOME").is_none()
+            && let Some(d) = &proj.hungjury_dir
+        {
+            cfg.data_dir = d.clone();
+            cfg.memory_db = d.join("memory.db");
+        }
+        cfg.project_root = proj
+            .hungjury_dir
+            .as_deref()
+            .and_then(|p| p.parent())
+            .or_else(|| proj.toml.as_deref().and_then(|p| p.parent()))
+            .map(Path::to_path_buf);
         // [jurors, judge] — explicitly configured somewhere?
         let mut models_set = [false; 2];
 
         // Global user config.
-        let global_toml = global_config_path().map(|p| load_toml(&p)).transpose()?;
+        let global_path = global_config_path();
+        let global_toml = global_path.as_ref().map(|p| load_toml(p)).transpose()?;
         if let Some(t) = &global_toml {
             track_models(t, &mut models_set);
-            cfg.apply_toml(t);
+            cfg.apply_toml(t, global_path.as_deref().and_then(|p| p.parent()));
         }
 
-        // Project TOML layer.
-        let toml_path = config_path
-            .map(|p| p.to_path_buf())
-            .or_else(|| PathBuf::from("hungjury.toml").is_file().then_some(PathBuf::from("hungjury.toml")));
-        let project_toml = toml_path.map(|p| load_toml(&p)).transpose()?;
+        // Project TOML layer: --config > discovered (config.toml inside
+        // .hungjury/ preferred over a flat hungjury.toml).
+        let toml_path = config_path.map(|p| p.to_path_buf()).or(proj.toml.clone());
+        let project_toml = toml_path.as_ref().map(|p| load_toml(p)).transpose()?;
         if let Some(t) = &project_toml {
             track_models(t, &mut models_set);
-            cfg.apply_toml(t);
+            cfg.apply_toml(t, toml_path.as_deref().and_then(|p| p.parent()));
         }
 
         // Profile layer — project profiles shadow global ones, and both
         // shadow the built-ins: `default` (a no-op) and bare backend names.
         if let Some(name) = cli.profile.as_deref() {
-            if let Some(profile) = find_profile(name, project_toml.as_ref(), global_toml.as_ref()) {
+            if let Some((profile, from_project)) =
+                find_profile(name, project_toml.as_ref(), global_toml.as_ref())
+            {
                 track_models(profile, &mut models_set);
-                cfg.apply_toml(profile);
+                let base = if from_project {
+                    toml_path.as_deref().and_then(|p| p.parent())
+                } else {
+                    global_path.as_deref().and_then(|p| p.parent())
+                };
+                cfg.apply_toml(profile, base);
             } else if let Some(builtin) = builtin_profile(name) {
                 track_models(&builtin, &mut models_set);
-                cfg.apply_toml(&builtin);
+                cfg.apply_toml(&builtin, None);
             } else {
                 return Err(unknown_profile(
                     name,
@@ -344,6 +433,26 @@ impl Config {
         if let Some(p) = &cli.memory_db {
             cfg.memory_db = p.clone();
         }
+        if let Some(ns) = &cli.namespace {
+            cfg.namespace = Some(ns.clone()).filter(|s| !s.is_empty());
+        }
+
+        // `.hungjury/` conventions: a policy.md or prompts/ dir found by
+        // walk-up apply automatically unless something already set them.
+        if let Some(d) = &proj.hungjury_dir {
+            if cfg.policy_file.is_none() {
+                let p = d.join("policy.md");
+                if p.is_file() {
+                    cfg.policy_file = Some(p);
+                }
+            }
+            if cfg.prompts_dir.is_none() {
+                let p = d.join("prompts");
+                if p.is_dir() {
+                    cfg.prompts_dir = Some(p);
+                }
+            }
+        }
 
         // Resolve the domain policy text once — injected into juror and
         // judge prompts as `{{policy_block}}`.
@@ -387,7 +496,16 @@ impl Config {
         Ok(cfg)
     }
 
-    fn apply_toml(&mut self, t: &TomlConfig) {
+    /// Merge one toml layer. `base` is the directory holding the toml —
+    /// relative `prompts_dir`/`policy_file`/`memory_db` resolve against
+    /// it, so a config found by walk-up works from any cwd.
+    fn apply_toml(&mut self, t: &TomlConfig, base: Option<&Path>) {
+        let rel = |p: &PathBuf| -> PathBuf {
+            match (p.is_absolute(), base) {
+                (true, _) | (_, None) => p.clone(),
+                (false, Some(b)) => b.join(p),
+            }
+        };
         if let Some(v) = &t.jurors {
             self.jurors = v.clone();
         }
@@ -410,10 +528,16 @@ impl Config {
             self.costs = v.clone();
         }
         if let Some(v) = &t.prompts_dir {
-            self.prompts_dir = Some(v.clone());
+            self.prompts_dir = Some(rel(v));
         }
         if let Some(v) = &t.policy_file {
-            self.policy_file = Some(v.clone());
+            self.policy_file = Some(rel(v));
+        }
+        if let Some(v) = &t.memory_db {
+            self.memory_db = rel(v);
+        }
+        if let Some(v) = &t.namespace {
+            self.namespace = Some(v.clone()).filter(|s| !s.is_empty());
         }
         if let Some(l) = &t.limits {
             if let Some(v) = l.juror_timeout_secs {
@@ -510,14 +634,19 @@ fn track_models(t: &TomlConfig, set: &mut [bool; 2]) {
 
 /// Find profile `name` in TOML (project shadows global). `None` means the
 /// name may still resolve to a built-in — see [`builtin_profile`].
+/// `(profile, base_dir)` — base_dir is the dir of the toml the profile
+/// came from, so its relative paths resolve correctly.
 fn find_profile<'a>(
     name: &str,
     project: Option<&'a TomlConfig>,
     global: Option<&'a TomlConfig>,
-) -> Option<&'a TomlConfig> {
-    project
+) -> Option<(&'a TomlConfig, bool)> {
+    if let Some(t) = project.and_then(|t| t.profiles.as_ref()?.get(name)) {
+        return Some((t, true));
+    }
+    global
         .and_then(|t| t.profiles.as_ref()?.get(name))
-        .or_else(|| global.and_then(|t| t.profiles.as_ref()?.get(name)))
+        .map(|t| (t, false))
 }
 
 /// Built-in profiles, shadowed by any TOML profile of the same name:

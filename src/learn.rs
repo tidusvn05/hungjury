@@ -90,7 +90,7 @@ async fn rejudge(
     };
     let repo_id = ws_path.as_deref().map(crate::memory::workspace::repo_id);
     // Fresh retrieval: later cases see what earlier judged cases taught.
-    let memory_block = crate::memory::retrieve::retrieve(store, req, &ctx.config.memory, None)
+    let memory_block = crate::memory::retrieve::retrieve(store, req, &ctx.config.memory, ctx.config.namespace.as_deref(), None)
         .map(|r| r.block)
         .unwrap_or_default();
     let (call, usage) = judge::judge_call(
@@ -143,6 +143,7 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
                     &resp.answers,
                     ctx.config.hung_threshold,
                     ctx.config.memory.provisional_trust,
+                    ctx.config.namespace.as_deref(),
                     repo_id.as_deref(),
                     ws_path.as_deref(),
                     &ctx.config.judge,
@@ -160,15 +161,15 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
 /// Demote every active `source=judge` ruling/precedent on `qid`'s scope
 /// to `contested`. Returns how many entries changed. Human and imported
 /// memory are never touched by this guard.
-pub fn demote_judge_entries(store: &Store, qid: &str) -> usize {
+pub fn demote_judge_entries(store: &Store, ns: Option<&str>, qid: &str) -> usize {
     let mut demoted = 0;
     for e in store
-        .rulings(qid, 100)
+        .rulings(ns, qid, 100)
         .unwrap_or_default()
         .into_iter()
         .chain(
             store
-                .list(Some(Kind::Precedent), Some(&crate::memory::store::q_scope(qid)), true)
+                .list(Some(Kind::Precedent), Some(&crate::memory::store::q_scope(ns, qid)), true)
                 .unwrap_or_default(),
         )
     {
@@ -223,6 +224,7 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                     &resp.answers,
                     ctx.config.hung_threshold,
                     ctx.config.memory.provisional_trust,
+                    ctx.config.namespace.as_deref(),
                     repo_id.as_deref(),
                     ws_path.as_deref(),
                     &ctx.config.judge,
@@ -235,7 +237,7 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                     judge::conflict_keys(&req, &call, &resp.answers, ctx.config.hung_threshold)
                 {
                     if let Some(q) = req.questions.get(&key) {
-                        demote_judge_entries(store, &q.qid());
+                        demote_judge_entries(store, ctx.config.namespace.as_deref(), &q.qid());
                     }
                 }
                 // Re-confirmation: the judge repeating its earlier verdict on
@@ -248,7 +250,7 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                         .is_some_and(|prev| prev == j.ballot);
                     if confirmed && let Some(q) = req.questions.get(key) {
                         let _ = store.promote_rulings(
-                            &crate::memory::store::q_scope(&q.qid()),
+                            &crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()),
                             Source::Judge.base_trust(),
                         );
                     }
@@ -299,13 +301,12 @@ pub async fn learn_consolidate(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
         return Ok(());
     }
     for scope in qids.keys() {
-        let qid = scope.trim_start_matches("q:");
-        let rulings = store.all_rulings(qid)?;
+        let rulings = store.all_rulings(scope)?;
         if dry_run {
             eprintln!("  {scope}: {} rulings → consolidate", rulings.len());
             continue;
         }
-        consolidate_scope(ctx, store, qid, rulings).await?;
+        consolidate_scope(ctx, store, scope, rulings).await?;
     }
     Ok(())
 }
@@ -314,9 +315,11 @@ pub async fn learn_consolidate(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
 async fn consolidate_scope(
     ctx: &DecideCtx,
     store: &Store,
-    qid: &str,
+    scope: &str,
     rulings: Vec<crate::memory::store::Entry>,
 ) -> Result<()> {
+    // Display name for logs — the qid without any namespace prefix.
+    let qid = scope.rsplit("q:").next().unwrap_or(scope);
     let (kind, model) = crate::backend::BackendKind::parse(&ctx.config.judge)?;
     let backend = ctx.backend(kind);
     let rulings_block = rulings
@@ -381,7 +384,7 @@ async fn consolidate_scope(
         };
         let e = NewEntry {
             kind: Kind::Ruling,
-            scope: crate::memory::store::q_scope(qid),
+            scope: scope.to_string(),
             body: serde_json::json!({
                 "text": text,
                 "question": rulings.first()
@@ -504,7 +507,7 @@ pub fn feedback(
         let stored = resp.answers.get(key);
         let decided = stored.is_some() && !resp.hung.contains(key);
         if decided && contradicts(stored, &ballot) {
-            demoted += demote_judge_entries(store, &q.qid());
+            demoted += demote_judge_entries(store, ctx.config.namespace.as_deref(), &q.qid());
         }
 
         // Human confirms the judge's earlier verdict on an escalated key →
@@ -514,14 +517,14 @@ pub fn feedback(
             .is_some_and(|jv| jv == ballot);
         if confirmed {
             let _ = store.promote_rulings(
-                &crate::memory::store::q_scope(&q.qid()),
+                &crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()),
                 Source::Judge.base_trust(),
             );
         }
 
         let e = NewEntry {
             kind: Kind::Precedent,
-            scope: crate::memory::store::q_scope(&q.qid()),
+            scope: crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()),
             body: serde_json::json!({
                 "state_excerpt": excerpt,
                 "state_digest": digest,

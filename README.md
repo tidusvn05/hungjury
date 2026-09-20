@@ -60,9 +60,52 @@ Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHM
 
 ## Cách dùng dự kiến
 
+### Chạy nhanh (không cần thư mục)
+
+`hungjury` chạy được ở bất kỳ đâu — state gửi qua stdin/file, mọi dữ
+liệu nằm trong thư mục global `~/.local/share/hungjury` (hoặc
+`$HUNGJURY_HOME`):
+
 ```bash
 hungjury decide -q questions.json --state-file ticket.txt
 ```
+
+### Dùng trong project — `.hungjury/`
+
+Với một project thật, tạo thư mục `.hungjury/` (giống `.git`) để giữ
+config, policy và memory **riêng cho project đó**:
+
+```bash
+cd my-project && hungjury init
+# → .hungjury/config.toml  (skeleton, mọi thứ đã comment sẵn)
+# → .hungjury/policy.md    (rubric của bạn — tự động inject vào prompt)
+# → .hungjury/.gitignore   (memory.db, cache/, calls.jsonl, state.json)
+```
+
+Từ đó mọi lệnh `hungjury` chạy **ở bất kỳ subdir nào** của project đều
+walk-up tìm `.hungjury/` gần nhất — memory.db, cache, quota đều local,
+không lẫn với project khác. `hungjury doctor` cho thấy root được chọn.
+
+Quy tắc precedence: `--memory-db` > `$HUNGJURY_HOME` > `.hungjury/` >
+global. `hungjury.toml` ở ancestor cũng được walk-up nhưng chỉ nạp
+config — không di chuyển memory (backward compatible).
+
+### Tách memory theo mục đích
+
+Hai cấp độ:
+
+```toml
+# .hungjury/config.toml
+namespace = "triage"            # mềm: scopes thành triage:q:<qid>,
+                               # tách trong cùng một db
+
+[profiles.review]               # cứng: db riêng hoàn toàn
+jurors    = ["codex:gpt-5.6-terra@low"]
+memory_db = "memory-review.db"  # resolve theo .hungjury/
+policy_file = "policy-review.md"
+```
+
+`memory stats` liệt kê breakdown theo namespace.
 
 `questions.json`:
 

@@ -49,6 +49,7 @@ pub fn retrieve(
     store: &Store,
     req: &Request,
     cfg: &MemoryConfig,
+    ns: Option<&str>,
     ws_facts: Option<Vec<Entry>>,
 ) -> Result<Retrieval> {
     let state_text = match &req.state {
@@ -64,8 +65,8 @@ pub fn retrieve(
     let mut per_q: BTreeMap<String, (Vec<Entry>, Vec<Entry>)> = BTreeMap::new();
     for q in req.questions.values() {
         let qid = q.qid();
-        let rulings = store.rulings(&qid, cfg.max_rulings)?;
-        let precedents = store.precedents(&qid, &query, cfg.top_k)?;
+        let rulings = store.rulings(ns, &qid, cfg.max_rulings)?;
+        let precedents = store.precedents(ns, &qid, &query, cfg.top_k)?;
         per_q.insert(qid, (rulings, precedents));
     }
     let facts = ws_facts.unwrap_or_default();

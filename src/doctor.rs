@@ -73,6 +73,24 @@ pub async fn run(cfg: Option<&Config>, cfg_err: Option<&str>, json: bool) -> i32
                 ),
             });
             checks.push(Check {
+                name: "project".to_string(),
+                ok: true,
+                detail: match &c.project_root {
+                    Some(r) => format!("root {} (policy: {})",
+                        r.display(),
+                        c.policy_file.as_deref().map(|p| p.display().to_string())
+                            .unwrap_or_else(|| "none".into())),
+                    None => "none — global memory".to_string(),
+                },
+            });
+            if let Some(ns) = &c.namespace {
+                checks.push(Check {
+                    name: "namespace".to_string(),
+                    ok: true,
+                    detail: ns.clone(),
+                });
+            }
+            checks.push(Check {
                 name: "data_dir".to_string(),
                 ok: c.data_dir.is_dir() || mk_writable(&c.data_dir),
                 detail: c.data_dir.display().to_string(),
