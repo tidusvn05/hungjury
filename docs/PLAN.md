@@ -726,3 +726,18 @@ mất config). Giờ:
 - Fix kèm: eval_parallel test đọc quota thật → isolate HUNGJURY_HOME;
   level-0 frustration thiếu markers (lint tự bắt chính mình).
 - Chi tiết: docs/REPORT-2026-09-20.md. 112 tests, clippy sạch.
+
+## 2026-09-20h — adv64 multi-seed eval + audit-train
+
+- `eval --seeds 3 --seed 11 --audit-train 8` trên 64 cases (gồm 4
+  information-free, expected `hung` trên department):
+  jury 95.7% | jury+memory 98.6% | judge/informed 100% — go_pass 3/3,
+  memory_delta +2.9pts, memory_injected ~220/seed.
+- `--audit-train` đóng triệt vấn đề memory-engagement (s8): audit
+  re-judge emit rulings/precedents ở full trust trên jury-decided keys
+  → memory luôn có nội dung, không phụ thuộc hung rate.
+- Abstention giữ đúng dưới memory (empty tickets vẫn hung dept).
+- Fix kèm: labels abstention chỉ hung ở `department` (ticket rỗng là
+  calm/non-urgent defensible); aggregate report thêm `per_key_mean`;
+  promote_rulings granularity documented (scope-level, acceptable).
+- Artifact: examples/support-triage/eval-adv64.json.

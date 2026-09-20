@@ -86,6 +86,31 @@ Bài học:
 và `go.memory_delta_vs_jury`; `go.pass` đúng cả khi judge không phải
 ceiling (gap ≤ 0 → pass ⇔ memory không kéo jury xuống).
 
+**Phép đo cuối — 64 cases × 3 seeds, `--audit-train 8`**
+(`eval-adv64.json`; set giờ gồm 4 information-free cases với
+`expected: hung` trên `department`):
+
+| arm | mean | min–max | memory_injected |
+|---|---|---|---|
+| jury | 95.7% | 93.6–96.8% | 0 |
+| **jury+memory** | **98.6%** | **97.9–100%** | ~220 |
+| judge cold | 100% | — | 0 |
+| judge_informed | 100% | — | 0 |
+
+`go_pass 3/3`, `memory_delta_vs_jury` mean **+2.9pts**,
+`gap_closed` 0.67–1.0. Ba điểm đáng chú ý:
+
+1. **`--audit-train` giải quyết triệt để bài toán memory-engagement**
+   (bài học 4): mỗi seed đều có rulings inject (~220 entries) kể cả khi
+   train pass 0 hung — audit re-judge jury decisions, judge tự emit
+   rulings/precedents ở full trust vì jury đã quyết. Không còn run nào
+   memory no-op.
+2. **Abstention đúng cả khi có memory**: mọi arm giữ `department` hung
+   trên empty tickets — rulings không đè abstention.
+3. **Judge 100% cả 3 seeds** — rubric/policy đã hội tụ trên
+   distribution của generator; misses còn lại của jury toàn ở
+   `frustration` off-by-one (per_key ~80–94% vs 100% các key khác).
+
 ## pr-review — cổng review trên workspace
 
 ```bash
