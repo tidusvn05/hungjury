@@ -20,6 +20,11 @@ Tên gọi: *hung jury* là bồi thẩm đoàn không thống nhất được p
 | `score` | Chấm điểm theo thang đo có mô tả từng mức | một mức (số nguyên) | Điểm trung bình (số thực) + `legend` + `confidence` |
 | `noul` | Mệnh đề đúng/sai | `true` / `false` | Tỉ lệ phiếu `true`, trong [0, 1] + `confidence` |
 
+Mọi kiểu đều chấp nhận thêm `"abstain"`: juror từ chối khi state thiếu
+thông tin — abstain tính như *không có ballot*, nên dưới `min_quorum`
+câu hỏi treo thay vì bị đoán. (Hung bắt *bất đồng*; abstain bắt *thiếu
+thông tin* — đóng kịch bản "unanimous confident guess".)
+
 ## Nguồn cảm hứng
 
 Lấy cảm hứng từ [Jev của TypeSafe AI](https://typesafe.ai/blog/introducing-system-one-models-and-jev) — một "System One Model": model tối ưu cho tự động hóa thay vì chat, trả về quyết định có kiểu kèm xác suất đã calibrate, độ trễ 70–500ms. Hình dạng request/response của `hungjury` cố ý bám theo `typesafe_sdk` ([docs](https://docs.typesafe.ai/)).
@@ -143,6 +148,7 @@ Kết quả (stdout, rút gọn):
     "is_urgent":   {"type": "noul", "noul": 1.0, "confidence": 1.0}
   },
   "hung": [],
+  "sources": {"department": "jury", "frustration": "jury", "is_urgent": "judge"},
   "memory": {"rulings": 2, "precedents": 1, "facts": 0},
   "usage": {"wall_ms": 7421, "jurors": [{"juror": "claude:haiku", "status": "ok", "ms": 6300}]}
 }
@@ -255,7 +261,7 @@ Nên dùng khi câu trả lời **mơ hồ nhưng có rubric**, cần tín hiệ
 
 **Cách chọn tách biệt**: một project, một mục đích → `.hungjury/` + `namespace`; một project nhiều mục đích → `[profiles.X]` với `memory_db` riêng. Luôn viết `policy.md` trước khi bật escalate — benchmark (`docs/BENCHMARK.md`) cho thấy judge lệch policy gây −17pts.
 
-**Bài học thiết kế câu hỏi từ spike** (`examples/README.md` có chi tiết): hung chỉ bắt được *bất đồng giữa jurors*, không bắt được *thiếu thông tin* — ticket "hello?? anyone there" vẫn được 3 juror đồng loạt đoán `technical` vì `criteria` không có lối thoát. Muốn abstention thì thêm option `"unknown"`.
+**Bài học thiết kế câu hỏi từ spike** (`examples/README.md` có chi tiết): hung bắt *bất đồng giữa jurors*, còn *thiếu thông tin* cần `"abstain"` — ticket "hello?? anyone there" từng bị 3 juror đồng loạt đoán `technical` conf=1.0; với abstain trong schema, cả 3 từ chối → câu hỏi treo đúng nghĩa.
 
 ## Thiết kế
 

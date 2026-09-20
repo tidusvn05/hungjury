@@ -643,3 +643,20 @@ mất config). Giờ:
   conf 1.0. Hung bắt bất đồng, không bắt thiếu thông tin — question
   design cần lối thoát.
 - Rerun batch = toàn cache (`decided_by=cache`, 23ms/20 cases).
+
+## 2026-09-20c — abstain, per-key sources, eval-on-examples
+
+- **`Ballot::Abstain`** (`{"q": "abstain"}` mọi kiểu, trong schema enum):
+  juror từ chối khi state thiếu thông tin → không tính ballot →
+  `min_quorum` tự treo. Đóng lỗ "unanimous confident guess" (t12).
+  Judge abstain → key ở lại hung (`hung.retain` thay `clear()`).
+- **`Response.sources`** per-key (jury|judge|cache) + **`escalated`** —
+  batch output cũng ghi; audit được judge override key nào.
+- **Prompt template hash** vào cache key — đổi juror.md tự invalidate
+  (trước chỉ có policy).
+- **`eval` nhận `questions_file`** (helper `case_questions` chung với
+  batch) + expected `"hung"` → đúng khi key unresolved.
+- **Eval trên support-triage (seed 1, 10 train/10 test):** jury 93.3%,
+  **jury+memory 100%**, judge cold 96.6%, judge_informed 93.1%,
+  `go.pass=true` — memory *giúp* trên use case thật (đối lập
+  adversarial bench nơi nó poison).

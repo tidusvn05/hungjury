@@ -58,6 +58,10 @@ pub enum Ballot {
     Score(usize),
     /// Boolean vote.
     Noul(bool),
+    /// The juror declined to answer — the state lacks the information.
+    /// Counts as *no ballot* for that question, so a unanimous abstain
+    /// lands under `min_quorum` and hangs.
+    Abstain,
 }
 
 impl Ballot {
@@ -67,9 +71,15 @@ impl Ballot {
             Ballot::Choice(c) => serde_json::Value::String(c.clone()),
             Ballot::Score(s) => serde_json::json!(s),
             Ballot::Noul(b) => serde_json::Value::Bool(*b),
+            Ballot::Abstain => serde_json::Value::String("abstain".into()),
         }
     }
 }
+
+/// Reserved answer string — `{"<key>": "abstain"}` from a juror is a
+/// decline, not a choice. (Don't name a criterion `abstain` — it would
+/// be unreachable.)
+pub const ABSTAIN: &str = "abstain";
 
 /// Validate a question-map key: `[A-Za-z_][A-Za-z0-9_]*`.
 pub fn valid_key(key: &str) -> bool {
@@ -174,23 +184,34 @@ impl Question {
     }
 
     /// The JSON Schema fragment for this question's answer value, in the
-    /// strict subset codex accepts (enum/integer/boolean only).
+    /// strict subset codex accepts (enum/integer/boolean only). Every
+    /// question also accepts the string `"abstain"`.
     pub fn answer_schema(&self) -> serde_json::Value {
         match self {
             Question::Choice { criteria, .. } => serde_json::json!({
                 "type": "string",
-                "enum": criteria.keys().collect::<Vec<_>>(),
+                "enum": criteria.keys().map(String::as_str).chain([ABSTAIN])
+                    .collect::<Vec<_>>(),
             }),
             Question::Score { criteria, .. } => serde_json::json!({
-                "type": "integer",
-                "enum": (0..criteria.len()).collect::<Vec<_>>(),
+                "enum": (0..criteria.len())
+                    .map(serde_json::Value::from)
+                    .chain([serde_json::Value::String(ABSTAIN.into())])
+                    .collect::<Vec<_>>(),
             }),
-            Question::Noul { .. } => serde_json::json!({"type": "boolean"}),
+            Question::Noul { .. } => serde_json::json!({
+                "enum": [true, false, ABSTAIN],
+            }),
         }
     }
 
     /// Type-check one raw answer value into a [`Ballot`].
     pub fn validate_answer(&self, key: &str, v: &serde_json::Value) -> Result<Ballot> {
+        // `"abstain"` is accepted for every question type — the juror is
+        // saying the state doesn't contain enough to decide.
+        if v.as_str() == Some(ABSTAIN) {
+            return Ok(Ballot::Abstain);
+        }
         match self {
             Question::Choice { criteria, .. } => {
                 let s = v.as_str().ok_or_else(|| Error::Validation {
@@ -379,13 +400,34 @@ mod tests {
 
     #[test]
     fn answer_schema_variants() {
-        assert_eq!(choice().answer_schema()["enum"], json!(["billing", "sales", "technical"]));
-        assert_eq!(score().answer_schema()["enum"], json!([0, 1, 2]));
+        assert_eq!(
+            choice().answer_schema()["enum"],
+            json!(["billing", "sales", "technical", "abstain"])
+        );
+        assert_eq!(score().answer_schema()["enum"], json!([0, 1, 2, "abstain"]));
         assert_eq!(
             serde_json::from_value::<Question>(json!({"type":"noul","instructions":"i"}))
                 .unwrap()
-                .answer_schema()["type"],
-            json!("boolean")
+                .answer_schema()["enum"],
+            json!([true, false, "abstain"])
+        );
+    }
+
+    #[test]
+    fn abstain_validates_for_every_type() {
+        assert_eq!(
+            choice().validate_answer("d", &json!("abstain")).unwrap(),
+            Ballot::Abstain
+        );
+        assert_eq!(
+            score().validate_answer("f", &json!("abstain")).unwrap(),
+            Ballot::Abstain
+        );
+        let noul: Question =
+            serde_json::from_value(json!({"type":"noul","instructions":"i"})).unwrap();
+        assert_eq!(
+            noul.validate_answer("u", &json!("abstain")).unwrap(),
+            Ballot::Abstain
         );
     }
 

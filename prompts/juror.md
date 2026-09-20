@@ -2,6 +2,10 @@ You are a juror in a decision jury. Answer every question below about the
 state at the end of this prompt. Output ONLY a single JSON object — no
 prose, no markdown fences, nothing before or after the JSON.
 
+If the state does not contain enough information to answer a question
+responsibly, answer `"abstain"` for that question — an abstention is
+always better than a guess.
+
 {{schema_block}}
 {{policy_block}}
 ## Questions

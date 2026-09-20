@@ -56,9 +56,12 @@ fn load_cases(path: &Path) -> Result<Vec<Case>> {
             .ok_or_else(|| {
                 Error::Request(format!("{} line {}: missing 'expected' object", path.display(), i + 1))
             })?;
+        // Shared question set: `questions_file` resolves against the
+        // cases file's directory (same contract as `batch`).
+        let questions = crate::request::case_questions(&v, path, i + 1)?;
         let req = Request::from_json(&serde_json::json!({
             "state": v["state"],
-            "questions": v["questions"],
+            "questions": questions,
         })
         .to_string())
         .map_err(|e| Error::Request(format!("{} line {}: {e}", path.display(), i + 1)))?;
@@ -97,6 +100,8 @@ fn ballot_matches(b: &Ballot, expected: &serde_json::Value) -> bool {
         Ballot::Choice(c) => expected.as_str() == Some(c.as_str()),
         Ballot::Score(s) => expected.as_u64() == Some(*s as u64),
         Ballot::Noul(v) => expected.as_bool() == Some(*v),
+        // A judge abstention never matches a concrete expectation.
+        Ballot::Abstain => expected.as_str() == Some("hung"),
     }
 }
 
@@ -187,6 +192,17 @@ fn score_response(
         note_calls(stats, &ju.model, 1);
     }
     for (key, want) in expected {
+        // `"hung"` is a valid expectation: correct iff the key stayed
+        // unresolved (hung or judge-abstained).
+        if want.as_str() == Some("hung") {
+            stats.decided += 1;
+            if resp.hung.contains(key) {
+                stats.correct += 1;
+            } else {
+                note_mismatch(stats, case, key, want, answerout_json(&resp.answers[key]));
+            }
+            continue;
+        }
         match resp.answers.get(key).and_then(|a| answer_matches(a, want)) {
             Some(true) => {
                 stats.decided += 1;
@@ -631,6 +647,8 @@ mod tests {
                 },
             )]),
             hung: vec![],
+            escalated: vec![],
+            sources: BTreeMap::new(),
             memory: MemoryUse::default(),
             usage: Usage {
                 wall_ms: 100,

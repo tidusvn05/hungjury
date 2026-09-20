@@ -145,6 +145,35 @@ impl Request {
     }
 }
 
+/// Resolve a case's `questions` — inline `questions` wins, else load
+/// `questions_file` relative to `base` (the cases file's directory).
+/// Shared by `batch` and `eval` case loading.
+pub fn case_questions(
+    v: &serde_json::Value,
+    cases_path: &std::path::Path,
+    line: usize,
+) -> Result<serde_json::Value> {
+    match v.get("questions") {
+        Some(q) if !q.is_null() => Ok(q.clone()),
+        _ => {
+            let Some(f) = v.get("questions_file").and_then(|x| x.as_str()) else {
+                return Err(Error::Request(format!(
+                    "{} line {line}: needs `questions` or `questions_file`",
+                    cases_path.display()
+                )));
+            };
+            let p = cases_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join(f);
+            serde_json::from_str(
+                &std::fs::read_to_string(&p).map_err(|e| Error::io(&p, e))?,
+            )
+            .map_err(|e| Error::Request(format!("{}: bad JSON: {e}", p.display())))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -242,7 +242,10 @@ pub async fn judge_call(
     let rationale = &v["rationale"];
     let mut judged = BTreeMap::new();
     for key in req.questions.keys() {
-        if let Some(b) = ballots.get(key) {
+        // A judge abstention is not a verdict — the key stays hung.
+        if let Some(b) = ballots.get(key)
+            && *b != Ballot::Abstain
+        {
             judged.insert(
                 key.clone(),
                 JudgeOut {

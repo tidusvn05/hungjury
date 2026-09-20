@@ -20,6 +20,20 @@ key: `"hung"` trong expected = đúng khi key đó nằm trong `hung`.
 hung → `queue_pending` (t19 "chargeback today" — jurors chia 2:1 vì nó
 vừa là deadline vừa là hăm dọa: đúng chỗ policy cần con người).
 
+**Eval arms trên use case này** (`hungjury eval cases.jsonl`, 10 train /
+10 test, seed 1 — `eval-report.json`):
+
+| arm | accuracy | calls |
+|---|---|---|
+| jury | 93.3% | 30 |
+| **jury+memory** | **100%** | 30 |
+| judge cold | 96.6% | 10 |
+| judge_informed | 93.1% | 10 |
+
+`go.pass=true` — rulings judge ghi ở train pass giúp jury+memory đạt
+100% trên test (mẫu nhỏ, nhưng đây là bằng chứng đầu tiên memory *giúp*
+trên use case thật thay vì poison như adversarial bench).
+
 ## pr-review — cổng review trên workspace
 
 ```bash
@@ -53,11 +67,11 @@ tail -50 build.log | hungjury decide --state-file - --questions @questions.json
 
 ## Bài học từ spike
 
-- **Hung bắt *bất đồng*, không bắt *thiếu thông tin*.** t12
-  ("hello?? anyone there") — 3 juror đồng loạt đoán `technical`
-  conf=1.0 thay vì treo. Đã kiểm chứng fix: thêm option `"unknown"`
-  vào `criteria` → cả 3 chọn `unknown` conf 1.0 (route được về hàng
-  người), thay vì bịa department.
+- **Hung bắt *bất đồng*, `"abstain"` bắt *thiếu thông tin*.** t12
+  ("hello?? anyone there") từng bị 3 juror đồng loạt đoán `technical`
+  conf=1.0. Nay juror có thể trả `"abstain"` (mọi kiểu câu hỏi) — cả 3
+  abstain → `department` hung, `sources` chỉ ghi nhận keys đã quyết.
+  Không cần thêm option `"unknown"` thủ công nữa.
 - **Cache đúng và nhanh**: rerun 20 cases = 23ms, answers identical,
   `decided_by=cache`. Đổi `policy.md` → cache key đổi → invalidate tự động.
 - **Memory chỉ ghi khi judge chạy**: jury-decided cases không ghi

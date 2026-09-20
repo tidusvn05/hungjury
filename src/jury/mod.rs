@@ -122,6 +122,9 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     if workspace_mode && ws_stamp.is_none() {
         tracing::info!("non-git workspace: decision will not be cached");
     }
+    // Load the juror template once — its hash joins the cache key so a
+    // prompt edit can't hit stale verdicts (same argument as `policy`).
+    let juror_tmpl = ctx.prompts.load("juror.md")?;
     let jury_config = serde_json::json!({
         "jurors": ctx.config.jurors,
         "samples": ctx.config.samples,
@@ -131,9 +134,10 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         "tools": workspace_mode,
         "explain": ctx.config.explain,
         "memory": ctx.config.memory.enabled,
-        // Policy text changes prompts — fold its hash into the cache key
-        // so stale verdicts can't hit after a policy edit.
+        // Policy + prompt text change answers — fold their hashes into
+        // the cache key so edits can't hit stale verdicts.
         "policy": ctx.config.policy.as_deref().map(crate::util::sha256_str),
+        "prompt": crate::util::sha256_str(&juror_tmpl),
     })
     .to_string();
     let cache_key = Cache::key(
@@ -148,6 +152,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                 serde_json::from_value::<Response>(hit.response.clone())
         {
             resp.decided_by = DecidedBy::Cache;
+            resp.sources.values_mut().for_each(|s| *s = DecidedBy::Cache);
             let code = resp.exit_code();
             return Ok((resp, code));
         }
@@ -158,9 +163,10 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     // 2. Render prompts.
     let schema = ballot_schema(&req.questions, ctx.config.explain);
     let tag = crate::util::nonce();
-    let prompt_with_mem = render_juror_prompt(ctx, req, &retrieval.block, &schema, &tag)?;
+    let prompt_with_mem =
+        render_juror_prompt(ctx, req, &retrieval.block, &schema, &tag, &juror_tmpl)?;
     let prompt_blind = if ctx.config.memory.blind_juror {
-        Some(render_juror_prompt(ctx, req, "", &schema, &tag)?)
+        Some(render_juror_prompt(ctx, req, "", &schema, &tag, &juror_tmpl)?)
     } else {
         None
     };
@@ -228,7 +234,11 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     for (key, q) in &req.questions {
         let mut votes: Vec<(f64, Ballot)> = Vec::new();
         for (juror_name, ballots) in &ok_ballots {
-            if let Some(b) = ballots.get(key) {
+            // An abstention is *no ballot* for this question — it must
+            // not count toward quorum nor the vote denominator.
+            if let Some(b) = ballots.get(key)
+                && *b != Ballot::Abstain
+            {
                 let w = ctx
                     .store
                     .as_ref()
@@ -260,6 +270,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         .collect();
     let mut decided_by = DecidedBy::Jury;
     let mut judge_usage: Option<JudgeUsage> = None;
+    let mut escalated: Vec<String> = Vec::new();
     if !hung.is_empty() {
         match ctx.config.escalate {
             Escalate::Sync => {
@@ -298,8 +309,13 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                             apply_judge(a, verdict);
                         }
                     }
-                    decided_by = DecidedBy::Judge;
-                    hung.clear();
+                    if !call.judged.is_empty() {
+                        decided_by = DecidedBy::Judge;
+                    }
+                    // Keys sent up for ruling; keys the judge skipped or
+                    // abstained on stay hung.
+                    escalated = hung.clone();
+                    hung.retain(|k| !call.judged.contains_key(k));
                 }
                 judge_usage = Some(ju);
             }
@@ -308,12 +324,30 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         }
     }
 
-    // 6. Response, decisions log, cache.
+    // 6. Response, decisions log, cache. Per-key attribution: every
+    // decided key remembers whether jury or judge produced the verdict
+    // (hung keys are undecided — absent from `sources`).
+    let sources: BTreeMap<String, DecidedBy> = answers
+        .keys()
+        .filter(|k| !hung.contains(*k))
+        .map(|k| {
+            (
+                k.clone(),
+                if escalated.contains(k) {
+                    DecidedBy::Judge
+                } else {
+                    DecidedBy::Jury
+                },
+            )
+        })
+        .collect();
     let response = Response {
         id: crate::util::new_decision_id(),
         decided_by,
         answers,
         hung: hung.clone(),
+        escalated,
+        sources,
         memory: retrieval.used.clone(),
         usage: Usage {
             wall_ms: started.elapsed().as_millis() as u64,
@@ -453,8 +487,8 @@ fn render_juror_prompt(
     memory_block: &str,
     schema: &serde_json::Value,
     tag: &str,
+    tmpl: &str,
 ) -> Result<String> {
-    let tmpl = ctx.prompts.load("juror.md")?;
     let mut vars: HashMap<&str, String> = HashMap::new();
     vars.insert("schema_block", schema_block_text(schema));
     vars.insert("policy_block", policy_block(ctx));
@@ -463,7 +497,7 @@ fn render_juror_prompt(
     vars.insert("workspace_block", workspace_render(req));
     vars.insert("state_tag", format!("state-{tag}"));
     vars.insert("state", state_render(req));
-    Ok(crate::prompt::render(&tmpl, &vars))
+    Ok(crate::prompt::render(tmpl, &vars))
 }
 
 /// The JSON schema contract block embedded in prompts (devin needs it —

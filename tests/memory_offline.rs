@@ -872,3 +872,147 @@ async fn batch_loads_shared_questions_file() {
         serde_json::from_str(std::fs::read_to_string(&out).unwrap().trim()).unwrap();
     assert_eq!(line["answers"]["q"]["choice"], "y");
 }
+
+/// Every juror abstaining on a question = zero ballots → quorum-fail →
+/// hung (not a unanimous "decision").
+#[tokio::test]
+async fn unanimous_abstain_hangs() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "hello?? anyone there",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "i", "criteria": {"billing": "m", "technical": "t"}}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|_| Ok(r#"{"dept": "abstain"}"#.to_string()));
+    let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 2);
+    assert_eq!(resp.hung, vec!["dept".to_string()]);
+    // Hung keys have no decider attribution.
+    assert!(!resp.sources.contains_key("dept"));
+}
+
+/// One abstention + two agreeing ballots → quorum met, jury decides.
+#[tokio::test]
+async fn abstain_does_not_block_quorum() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "refund please",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "i", "criteria": {"billing": "m", "technical": "t"}}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|req| {
+        Ok(if req.agent.contains("mock:a") {
+            r#"{"dept": "abstain"}"#
+        } else {
+            r#"{"dept": "billing"}"#
+        }
+        .to_string())
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 0);
+    assert!(resp.hung.is_empty());
+    assert_eq!(
+        resp.sources.get("dept"),
+        Some(&hungjury::response::DecidedBy::Jury)
+    );
+}
+
+/// A judge abstention leaves the key hung instead of silently clearing
+/// it — `escalated` records what was sent up, `sources` marks judge keys.
+#[tokio::test]
+async fn judge_abstain_keeps_key_hung() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "x",
+            "questions": {
+                "urgent": {"type": "noul", "id": "support.urgent", "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|req| {
+        if req.agent.starts_with("judge:") {
+            return Ok(r#"{
+                "answers": {"urgent": "abstain"},
+                "rationale": {},
+                "rulings": [], "facts": []
+            }"#
+            .to_string());
+        }
+        Ok(r#"{"urgent": true}"#.to_string())
+    });
+    let mut c = cfg(&dir, &["mock:a"], "mock:j"); // 1 juror < quorum → hung
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(c, backend);
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 2);
+    assert_eq!(resp.hung, vec!["urgent".to_string()]);
+    assert_eq!(resp.escalated, vec!["urgent".to_string()]);
+    assert_eq!(resp.decided_by, hungjury::response::DecidedBy::Jury);
+}
+
+/// When the judge resolves an escalated key, `sources` attributes that
+/// key to the judge while jury-decided keys stay `jury`.
+#[tokio::test]
+async fn sources_attribute_judge_keys() {
+    let dir = tempfile::tempdir().unwrap();
+    let req = Request::from_json(
+        r#"{
+            "state": "x",
+            "questions": {
+                "dept": {"type": "choice", "id": "support.dept",
+                         "instructions": "i", "criteria": {"billing": "m", "technical": "t"}},
+                "urgent": {"type": "noul", "id": "support.urgent", "instructions": "time-sensitive"}
+            }
+        }"#,
+    )
+    .unwrap();
+    let backend = MockBackend::new(|req| {
+        if req.agent.starts_with("judge:") {
+            return Ok(r#"{
+                "answers": {"dept": "billing", "urgent": false},
+                "rationale": {}, "rulings": [], "facts": []
+            }"#
+            .to_string());
+        }
+        // dept splits 1-1 → hung; urgent unanimous → jury.
+        Ok(if req.agent.contains("mock:a") {
+            r#"{"dept": "billing", "urgent": false}"#
+        } else {
+            r#"{"dept": "technical", "urgent": false}"#
+        }
+        .to_string())
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
+    c.escalate = Escalate::Sync;
+    let ctx = ctx_with(c, backend);
+    let (resp, code) = decide(&ctx, &req).await.unwrap();
+    assert_eq!(code, 0);
+    assert_eq!(resp.decided_by, hungjury::response::DecidedBy::Judge);
+    assert_eq!(resp.escalated, vec!["dept".to_string()]);
+    assert_eq!(
+        resp.sources.get("dept"),
+        Some(&hungjury::response::DecidedBy::Judge)
+    );
+    assert_eq!(
+        resp.sources.get("urgent"),
+        Some(&hungjury::response::DecidedBy::Jury)
+    );
+}

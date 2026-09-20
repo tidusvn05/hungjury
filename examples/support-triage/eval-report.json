@@ -1,0 +1,124 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.9655172413793104,
+      "calls": 10,
+      "calls_by_backend": {
+        "claude": 10
+      },
+      "correct": 28,
+      "decided": 29,
+      "est_cost_usd": null,
+      "hung": 1,
+      "hung_rate": 0.03333333333333333,
+      "mismatches": [
+        {
+          "case": 9,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 16594.4,
+      "wall_ms_p95": 26867
+    },
+    "judge_informed": {
+      "accuracy": 0.9310344827586207,
+      "calls": 10,
+      "calls_by_backend": {
+        "claude": 10
+      },
+      "correct": 27,
+      "decided": 29,
+      "est_cost_usd": null,
+      "hung": 1,
+      "hung_rate": 0.03333333333333333,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 2,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 9,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 18344.4,
+      "wall_ms_p95": 21303
+    },
+    "jury": {
+      "accuracy": 0.9333333333333333,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 10,
+        "codex": 10,
+        "devin": 10
+      },
+      "correct": 28,
+      "decided": 30,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 9,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 20133.3,
+      "wall_ms_p95": 46510
+    },
+    "jury_memory": {
+      "accuracy": 1.0,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 10,
+        "codex": 10,
+        "devin": 10
+      },
+      "correct": 30,
+      "decided": 30,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [],
+      "wall_ms_mean": 17674.5,
+      "wall_ms_p95": 23686
+    }
+  },
+  "cases": 20,
+  "config": {
+    "escalate": "Queue",
+    "hung_threshold": 0.5,
+    "judge": "claude:opus@high",
+    "jurors": [
+      "claude:haiku",
+      "codex:gpt-5.6-terra@low",
+      "devin:swe-2-medium"
+    ],
+    "min_quorum": 2,
+    "samples": 1
+  },
+  "go": {
+    "accuracy_gap_jury_to_judge": 0.03218390804597704,
+    "gap_closed_by_memory": 2.0714285714285694,
+    "hung_rate_drop": 0.0,
+    "pass": true
+  },
+  "label": "support-triage",
+  "seed": 1,
+  "test": 10,
+  "train": 10
+}

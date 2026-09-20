@@ -179,6 +179,7 @@ fn ballot_label(b: &Ballot) -> String {
         Ballot::Choice(c) => c.clone(),
         Ballot::Score(s) => s.to_string(),
         Ballot::Noul(v) => v.to_string(),
+        Ballot::Abstain => "abstain".to_string(),
     }
 }
 

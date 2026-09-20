@@ -36,26 +36,7 @@ pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>) -> Result<u8
         })?;
         // `questions` inline wins; `questions_file` resolves against the
         // cases file's directory so a shared question set stays DRY.
-        let questions = match v.get("questions") {
-            Some(q) if !q.is_null() => q.clone(),
-            _ => {
-                let Some(f) = v.get("questions_file").and_then(|x| x.as_str()) else {
-                    return Err(Error::Request(format!(
-                        "{} line {}: needs `questions` or `questions_file`",
-                        cases.display(),
-                        i + 1
-                    )));
-                };
-                let p = cases
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .join(f);
-                serde_json::from_str(
-                    &std::fs::read_to_string(&p).map_err(|e| Error::io(&p, e))?,
-                )
-                .map_err(|e| Error::Request(format!("{}: bad JSON: {e}", p.display())))?
-            }
-        };
+        let questions = crate::request::case_questions(&v, cases, i + 1)?;
         let req = Request::from_json(
             &serde_json::json!({"state": v["state"], "questions": questions}).to_string(),
         )
@@ -95,6 +76,8 @@ pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>) -> Result<u8
                     "answers": resp.answers,
                     "decided_by": resp.decided_by,
                     "hung": resp.hung,
+                    "escalated": resp.escalated,
+                    "sources": resp.sources,
                     "exit": code,
                 })
                 .to_string()

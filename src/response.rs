@@ -179,6 +179,15 @@ pub struct Response {
     pub answers: BTreeMap<String, AnswerOut>,
     /// Hung questions left unresolved.
     pub hung: Vec<String>,
+    /// Hung questions that were escalated to the judge (empty when no
+    /// escalation ran). A subset may still be in `hung` if the judge
+    /// abstained.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub escalated: Vec<String>,
+    /// Per-key attribution: which decider produced each *decided*
+    /// answer (`jury` | `judge` | `cache`). Hung keys are absent.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, DecidedBy>,
     /// Memory usage summary.
     pub memory: MemoryUse,
     /// Call accounting.
