@@ -1,0 +1,4 @@
+2026-01-15T14:00:10Z [test] suite "unit": 41 failed, 0 passed — all fail with: ReferenceError: config is not defined at src/config.js:3
+2026-01-15T14:00:40Z [test] suite "integration": 12 failed, 0 passed — same ReferenceError
+2026-01-15T14:01:00Z [test] suite "e2e": 8 failed, 0 passed — same ReferenceError
+2026-01-15T14:01:01Z [ci] all lanes red; deploy skipped

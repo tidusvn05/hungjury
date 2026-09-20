@@ -1,0 +1,9 @@
+$ cargo build --workspace
+   Compiling app v0.4.1
+error[E0432]: unresolved import `crate::util::rfc3339_at`
+ --> src/batch.rs:14:9
+  |
+14| use crate::util::rfc3339_at;
+  |         ^^^^^^^^^^^^^^^^^^ no `rfc3339_at` in `util`
+error: could not compile `app` (lib) due to 1 previous error
+[ci] lane build exit code 101

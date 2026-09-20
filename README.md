@@ -232,6 +232,7 @@ Ba kịch bản runnable trong `examples/` — mỗi cái là một project `.hu
 - **Policy** đóng vai trò quyết định: "request đầu tiên là primary", "ASAP lịch sự không tính urgent". Không có nó, mỗi juror tự vẽ ranh giới → hung nhiều.
 - **`escalate=queue`**: ticket treo vào hàng — người duyệt sau bằng `memory decisions` + `feedback`, hoặc `learn --audit --recent`.
 - Chạy: `hungjury batch cases.jsonl --out results.jsonl` → 1 JSONL với `case`/`answers`/`decided_by`/`exit` — join được về ticket gốc.
+- **Đo được**: 93% theo expected labels viết tay (56/60 keys); case hung duy nhất là tranh chấp thật giữa hai luật policy → đúng chỗ cần con người.
 
 ### `pr-review` — cổng review trước merge
 
@@ -239,18 +240,22 @@ Ba kịch bản runnable trong `examples/` — mỗi cái là một project `.hu
 - **Câu hỏi**: `noul` needs_review/breaking, `score` risk.
 - **`escalate=sync`**: PR khó phán → judge mạnh quyết ngay trong luồng, rulings lưu thành án lệ theo `ws:<repo>` scope — repo này càng review càng có context.
 - Chạy: `hungjury decide --questions @questions.json --workspace ../some-repo --hint "…"` — tích hợp CI bằng exit code (`2` = treo → bắt buộc người review).
+- **Đo được**: jurors chia phiếu trên breaking/risk → cả 4 case qua judge; rulings ghi `q:pr.*` (key treo ở trust 0.4 provisional), fact về repo ở `ws:<repo>`.
 
 ### `log-triage` — triage log CI/production
 
 - **State**: text log đỏ; **câu hỏi**: `noul` flaky/actionable, `score` severity.
 - Policy phân biệt "infra noise → retry" vs "lỗi thật → dev fix" — hai thứ thường bị model lẫn.
-- Chạy per-failure trong CI: `hungjury decide --state-file failure.log --questions @questions.json`.
+- Chạy per-failure trong CI: `hungjury decide --state-file failure.log --questions @questions.json`, hoặc pipe thẳng `--state-file -`.
+- **Đo được**: 8/8 log fixtures đúng hết (100%) — flaky vs actionable không lẫn.
 
 ### Khi nào nên/không nên dùng
 
 Nên dùng khi câu trả lời **mơ hồ nhưng có rubric**, cần tín hiệu xác suất (confidence/probabilities) và hung là output hợp lệ — triage, gate, enrich. Không dùng cho câu hỏi khách quan chắc chắn (regex/parse được thì code thẳng rẻ hơn) hoặc khi mỗi quyết định sai đều không chấp nhận được mà không có người duyệt.
 
 **Cách chọn tách biệt**: một project, một mục đích → `.hungjury/` + `namespace`; một project nhiều mục đích → `[profiles.X]` với `memory_db` riêng. Luôn viết `policy.md` trước khi bật escalate — benchmark (`docs/BENCHMARK.md`) cho thấy judge lệch policy gây −17pts.
+
+**Bài học thiết kế câu hỏi từ spike** (`examples/README.md` có chi tiết): hung chỉ bắt được *bất đồng giữa jurors*, không bắt được *thiếu thông tin* — ticket "hello?? anyone there" vẫn được 3 juror đồng loạt đoán `technical` vì `criteria` không có lối thoát. Muốn abstention thì thêm option `"unknown"`.
 
 ## Thiết kế
 

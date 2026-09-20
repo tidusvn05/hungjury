@@ -1,0 +1,6 @@
+2026-01-15T15:20:44Z [test] test_invoice_pdf_layout ... FAILED
+  Snapshot mismatch: invoice-footer
+  - Expected: "Total due: $49.00 USD"
+  + Received:  "Total due: $49 USD"
+  note: snapshot tests fail deterministically; update snapshot or fix format
+2026-01-15T15:20:45Z [ci] lane frontend exit code 1

@@ -629,3 +629,17 @@ mất config). Giờ:
 - `batch` nhận `questions_file` (relative theo cases file) — DRY cho
   question set dùng chung. `--state-file -` đọc stdin → pipe log CI.
 - README: mục "Use cases thực tế" + "Khi nào nên/không nên dùng".
+
+## 2026-09-20b — expanded spikes: 20+8+4 cases with expected labels
+
+- `examples/score.py` — chấm results.jsonl theo `expected` trong cases
+  (string/bool/int/"hung").
+- Đo được: support-triage 56/60=93% (misses: 2 borderline frustration,
+  t12 jury đoán thay vì abstain — không có option "unknown"; t19 hung
+  đúng → queue_pending=1); log-triage 24/24=100%; pr-review 9/12 —
+  2 "miss" là judge áp policy đúng hơn labels (schema migration →
+  breaking). Escalation/provisional-trust/ws-facts đều fire đúng.
+- Kiểm chứng: thêm option `unknown` vào criteria → t12 chọn unknown
+  conf 1.0. Hung bắt bất đồng, không bắt thiếu thông tin — question
+  design cần lối thoát.
+- Rerun batch = toàn cache (`decided_by=cache`, 23ms/20 cases).

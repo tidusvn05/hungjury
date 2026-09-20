@@ -1,0 +1,5 @@
+$ npm ci
+npm ERR! code E503
+npm ERR! 503 Service Unavailable - GET https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz
+npm ERR! network this is a problem with the registry, retry later
+[ci] lane frontend exit code 1

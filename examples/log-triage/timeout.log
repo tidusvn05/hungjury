@@ -1,0 +1,6 @@
+2026-01-15T11:02:11Z [test] running suite "search" (2 of 3)
+2026-01-15T11:02:41Z [test] test_index_rebuild ... FAILED
+  error: timed out after 30s waiting for postgres.test:5432
+  note: test db container did not become ready
+2026-01-15T11:02:41Z [test] retrying once... test_index_rebuild ... ok
+2026-01-15T11:02:42Z [ci] lane search exit code 1 (flaky retry exhausted)
