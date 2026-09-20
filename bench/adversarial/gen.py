@@ -132,7 +132,10 @@ for i in range(12):
     add(t.format(amt=rng.choice(["$60", "$210"])), "billing" if "charge" in t or "refund" in t.lower() else "technical",
         2, True)
 
-# ---------- E: information-free states (4) — every key should abstain -> hung ----------
+# ---------- E: information-free states (4) ----------
+# Only `department` should abstain -> hung: an empty ticket genuinely IS
+# calm (frustration 0) and not urgent (false) — those are defensible
+# defaults, not guesses. `department` has no defensible value.
 empty_states = [
     "ok",
     "(empty ticket — no message body)",
@@ -140,7 +143,7 @@ empty_states = [
     "following up",
 ]
 for t in empty_states:
-    add(t, "hung", "hung", "hung")
+    add(t, "hung", 0, False)
 
 rng.shuffle(cases)
 with open("bench/adversarial/cases.jsonl", "w") as f:
