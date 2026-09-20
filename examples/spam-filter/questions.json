@@ -1,0 +1,29 @@
+{
+  "verdict": {
+    "type": "choice",
+    "id": "mail.verdict",
+    "instructions": "Classify the mail. Check phishing/scam markers before promo/ham. Abstain when the mail carries no interpretable content.",
+    "criteria": {
+      "ham": "Personal or transactional mail — invoices, order confirmations, replies, direct human messages; no pressure or deception",
+      "promo": "Legitimate bulk marketing or automated digest — unsubscribe link or recognizable brand, no deception",
+      "phishing": "Asks for credentials/card/OTP, spoofs a known brand linking to an unrelated domain, or uses a password-protected archive",
+      "scam": "Advance-fee/prize/lottery/investment fraud — money promised if the recipient pays or replies first"
+    }
+  },
+  "credential_risk": {
+    "type": "noul",
+    "id": "mail.credential_risk",
+    "instructions": "True only when the mail asks the recipient to enter or send credentials, card numbers, OTP, or ID documents. A wire/fee request does NOT count — that is scam, not credential risk.",
+    "criteria": {}
+  },
+  "spam_score": {
+    "type": "score",
+    "id": "mail.spam_score",
+    "instructions": "How unwanted the mail is for a typical recipient",
+    "criteria": [
+      "Clearly wanted — transactional or human-written; 'order confirmation', 'your invoice', a direct reply; no pressure",
+      "Bulk or mildly suspicious — 'unsubscribe', '% off', automated digests, vague business outreach ('quick question, are you the right person?')",
+      "Clearly unwanted or dangerous — phishing, scam, threats, deceptive links, 'verify your account', 'you won', 'wire transfer'. Does NOT count: unsubscribe links or marketing language alone (that's level 1)"
+    ]
+  }
+}

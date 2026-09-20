@@ -1,0 +1,10 @@
+{"case": "m1", "questions_file": "questions.json", "state": "Just switched from CompetitorApp — this is so much better, love the new dashboard!", "expected": {"action": "allow", "severity": 0, "illegal_or_safety": false}}
+{"case": "m2", "questions_file": "questions.json", "state": "This update is absolute crap, worst thing you've ever shipped. Refund me.", "expected": {"action": "allow", "severity": 0, "illegal_or_safety": false}}
+{"case": "m3", "questions_file": "questions.json", "state": "@user2291 you're a pathetic loser, go kill yourself", "expected": {"action": "remove", "severity": 2, "illegal_or_safety": false}}
+{"case": "m4", "questions_file": "questions.json", "state": "Selling oxycodone and xanax, no prescription needed — DM me for prices.", "expected": {"action": "escalate_human", "severity": 2, "illegal_or_safety": true}}
+{"case": "m5", "questions_file": "questions.json", "state": "Check out my spicy content page, link in bio ;)", "expected": {"action": "warn", "severity": 1, "illegal_or_safety": false}}
+{"case": "m6", "questions_file": "questions.json", "state": "I hate the new layout, who approved this garbage", "expected": {"action": "allow", "severity": 0, "illegal_or_safety": false}}
+{"case": "m7", "questions_file": "questions.json", "state": "I know where you live, Mike. Watch your back tonight.", "expected": {"action": "escalate_human", "severity": 2, "illegal_or_safety": true}}
+{"case": "m8", "questions_file": "questions.json", "state": "BUY FOLLOWERS NOW!!! cheapest prices, 10k followers $5 visit my site", "expected": {"action": "warn", "severity": 1, "illegal_or_safety": false}}
+{"case": "m9", "questions_file": "questions.json", "state": "ok", "expected": {"action": "allow", "severity": 0, "illegal_or_safety": false}}
+{"case": "m10", "questions_file": "questions.json", "state": "@user2210 dumb take as always lol, anyway the patch notes look fine", "expected": {"action": "allow", "severity": 1, "illegal_or_safety": false}}

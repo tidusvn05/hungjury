@@ -1,0 +1,5 @@
+# hungjury runtime state — never commit
+memory*.db
+cache/
+calls.jsonl
+state.json

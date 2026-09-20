@@ -233,11 +233,11 @@ print(d.answers)        # {"dept": {"choice": "billing", ...}, ...}
 feedback(d.id, {"dept": "billing"}, note="correct")
 ```
 
-TypeScript SDK vẫn để sau — cùng hình dạng `system_one(state, questions)`.
+TypeScript: `sdk/typescript/` — zero-dep Node wrapper cùng hình dạng (`decide`/`systemOne`/`feedback`, `cwd` cho project discovery).
 
 ## Use cases thực tế
 
-Ba kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
+Sáu kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
 
 ### `support-triage` — phân luồng ticket
 
@@ -261,6 +261,22 @@ Ba kịch bản runnable trong `examples/` — mỗi cái là một project `.hu
 - Policy phân biệt "infra noise → retry" vs "lỗi thật → dev fix" — hai thứ thường bị model lẫn.
 - Chạy per-failure trong CI: `hungjury decide --state-file failure.log --questions @questions.json`, hoặc pipe thẳng `--state-file -`.
 - **Đo được**: 8/8 log fixtures đúng hết (100%) — flaky vs actionable không lẫn.
+
+### `spam-filter` — phân loại mail
+
+- **State**: raw email (headers + body); **câu hỏi**: `choice` verdict (ham/promo/phishing/scam), `noul` credential_risk, `score` spam_score.
+- Policy dạy precedence: kiểm tra marker phishing/scam **trước** promo/ham — urgency + generic greeting + link lạ = phishing kể cả khi mạo danh brand thật.
+- **Đo được**: 35/36 = 97% — kể cả adversarial (zip kèm password → phishing; wire fee → scam chứ không phải credential risk). Miss duy nhất: mail rỗng — jury over-abstain trên `spam_score` (đáng lẽ 0 vì không có spam signal nào).
+
+### `support-routing` — điều phối queue
+
+- **State**: ticket text; **câu hỏi**: `choice` queue (legal/manager/billing/sales/technical theo precedence), `score` priority, `noul` vip.
+- **Đo được**: 30/36 = 83%, `queue` 12/12. Ba miss đều là **label vượt quá rubric** ("not urgent" → priority 0 là defensible; manager-escalation ≠ critical) — lặp lại đúng bài học cũ: jury lệch expected thì xem lại policy/labels trước.
+
+### `content-moderation` — kiểm duyệt UGC
+
+- **State**: user content; **câu hỏi**: `choice` action (allow/warn/remove/escalate_human), `score` severity, `noul` illegal_or_safety.
+- **Đo được**: 26/30 = 87%, severity 10/10. 3 `action` hung đều là **borderline thật** — "kill yourself" là remove hay escalate phụ thuộc credible-threat, jury chia đúng chỗ policy mơ hồ → escalate=queue đưa case đó cho người, đúng thiết kế.
 
 ### Khi nào nên/không nên dùng
 

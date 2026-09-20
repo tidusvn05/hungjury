@@ -142,6 +142,63 @@ tail -50 build.log | hungjury decide --state-file - --questions @questions.json
 **Kết quả:** 24/24 = 100% — flaky vs actionable phân biệt đúng hết
 (timeout/OOM/503 → retry; assert/compile/migration → dev fix).
 
+## spam-filter — phân loại mail
+
+```bash
+cd examples/spam-filter
+hungjury batch cases.jsonl --out results.jsonl   # 12 emails viết tay
+python3 ../score.py cases.jsonl results.jsonl
+```
+
+Câu hỏi: `verdict` choice (ham/promo/phishing/scam — policy áp
+precedence "check phishing/scam markers trước"), `credential_risk`
+noul (ask credentials/card/OTP — wire fee là scam, *không* tính),
+`spam_score` score 0–2.
+
+**Kết quả:** 35/36 = 97%. Adversarial đúng hết: password-zip invoice
+→ phishing; "won $1M, wire $50 fee" → scam + credential_risk=false.
+Miss: mail `"?"` — jury abstain cả `spam_score` dù "không có spam
+signal → 0" là defensible default (over-abstention trên score/noul
+cho empty content — pattern lặp lại, xem r11/m9 notes).
+
+## support-routing — điều phối queue
+
+```bash
+cd examples/support-routing
+hungjury batch cases.jsonl --out results.jsonl   # 12 tickets
+python3 ../score.py cases.jsonl results.jsonl
+```
+
+Câu hỏi: `queue` choice với precedence legal>manager>billing>sales>
+technical (multi-intent tickets), `priority` score 0–2, `vip` noul
+(chỉ enterprise signals rõ ràng — "I'm a paying customer" không tính).
+
+**Kết quả:** 30/36 = 83%; `queue` **12/12** (kể cả legal>billing
+precedence và "bug or plan limit?" → sales). Misses là bài học labels:
+r1 "not urgent" refund → priority 0 defensible (label 1 quá tay); r5
+manager-escalation → 1 (rubric: critical = outage/legal — label 2
+vượt rubric); r3 "500 seats evaluating" → `vip` hung vì nó *đúng* là
+enterprise signal. Khi jury lệch expected → check labels trước.
+
+## content-moderation — kiểm duyệt UGC
+
+```bash
+cd examples/content-moderation
+hungjury batch cases.jsonl --out results.jsonl   # 10 content items
+python3 ../score.py cases.jsonl results.jsonl
+```
+
+Câu hỏi: `action` choice (allow/warn/remove/escalate_human theo
+precedence illegal/safety > remove > warn > allow), `severity`
+score 0–2, `illegal_or_safety` noul.
+
+**Kết quả:** 26/30 = 87%; `severity` 10/10. Ba `action` hung đều là
+borderline *thật*: m3 "kill yourself" (remove vs escalate tuỳ
+credible-threat), m2 profanity+refund, m10 "dumb take lol" — jury chia
+đúng chỗ policy mơ hồ, escalate=queue đưa về cho người. Đó là hành vi
+được thiết kế, không phải lỗi: hung trên case tranh chấp thật có giá
+trị hơn một quyết định tự tin nhưng ngẫu nhiên.
+
 ## Bài học từ spike
 
 - **Hung bắt *bất đồng*, `"abstain"` bắt *thiếu thông tin*.** t12

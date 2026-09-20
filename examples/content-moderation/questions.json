@@ -1,0 +1,29 @@
+{
+  "action": {
+    "type": "choice",
+    "id": "mod.action",
+    "instructions": "What to do with this content. Apply policy precedence: illegal/safety > remove > warn > allow. Abstain when there is no interpretable content.",
+    "criteria": {
+      "allow": "Civil content including harsh product criticism — 'this is garbage', 'worst update ever'",
+      "warn": "Borderline — profanity at a product, NSFW-adjacent links, spammy self-promo",
+      "remove": "Severe but not illegal — targeted harassment, slurs, hate speech, 'kill yourself'",
+      "escalate_human": "Potentially illegal or safety-critical — drug/weapon offers, credible threats, minor safety, self-harm encouragement"
+    }
+  },
+  "severity": {
+    "type": "score",
+    "id": "mod.severity",
+    "instructions": "How severe the content is",
+    "criteria": [
+      "Benign — civil, criticism, profanity not aimed at a person; 'crap update', 'this sucks'",
+      "Borderline — insults, suggestive content, spammy promo; 'you're an idiot', 'check my link'",
+      "Severe — threats, hate speech, illegal offers, safety risk; 'I know where you live', 'selling oxycodone'. Does NOT count: rudeness or profanity alone (that's level 1 at most)"
+    ]
+  },
+  "illegal_or_safety": {
+    "type": "noul",
+    "id": "mod.illegal",
+    "instructions": "True only when content may be illegal or a safety risk: controlled substances, weapons, credible threats, minor safety, self-harm. Profanity or rudeness alone does NOT count.",
+    "criteria": {}
+  }
+}

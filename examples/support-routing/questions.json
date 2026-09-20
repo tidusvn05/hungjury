@@ -1,0 +1,30 @@
+{
+  "queue": {
+    "type": "choice",
+    "id": "route.queue",
+    "instructions": "Which team queue this ticket belongs to. Apply intent precedence from the policy: legal > manager > billing > sales > technical. Abstain when the ticket has no interpretable content.",
+    "criteria": {
+      "legal": "Lawsuits, subpoenas, compliance, data-breach reports, GDPR/CCPA requests, legal letters",
+      "manager": "Explicit escalation ask ('get me a manager', 'complaint to leadership') or repeated-failure frustration",
+      "billing": "Charges, refunds, invoices, subscription changes, payment method issues",
+      "sales": "Pricing/plan questions from non-customers, demos, upgrade evaluation — 'is X a bug or a plan limit?' is sales",
+      "technical": "Bugs, errors, feature help, integrations"
+    }
+  },
+  "priority": {
+    "type": "score",
+    "id": "route.priority",
+    "instructions": "Operational priority given stated impact",
+    "criteria": [
+      "Normal — how-to, feature request, no impact stated; 'how do I', 'would be nice'",
+      "Elevated — real business impact or polite deadline; 'we're blocked', 'needed by Friday', paying-customer complaint",
+      "Critical — production outage, data loss/exposure, legal action, chargeback deadline, security incident; 'down', 'lawsuit', 'data leaked'. Does NOT count: a polite deadline or being blocked without business-stopping impact (that's level 1)"
+    ]
+  },
+  "vip": {
+    "type": "noul",
+    "id": "route.vip",
+    "instructions": "True only on explicit enterprise signals: 'Enterprise plan', 'annual contract', '2000 seats', a named account manager. 'I'm a paying customer' or anger alone does NOT count.",
+    "criteria": {}
+  }
+}

@@ -1,0 +1,6 @@
+# Support-routing project config.
+jurors = ["claude:haiku", "codex:gpt-5.6-terra@low", "devin:swe-2-medium"]
+judge = "claude:opus@high"
+escalate = "queue"          # unroutable tickets wait for a human
+hung_threshold = 0.5
+min_quorum = 2
