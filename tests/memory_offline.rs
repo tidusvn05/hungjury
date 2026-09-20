@@ -630,8 +630,12 @@ fn policy_block_renders_and_loads() {
     // --policy-file resolves through Config::load.
     let pf = dir.path().join("policy.md");
     std::fs::write(&pf, "  domain rules here\n").unwrap();
+    // Declare mocks — Config::load otherwise scans PATH for agent CLIs,
+    // which fails where none are installed (CI runners).
     let over = hungjury::config::CliOverrides {
         policy_file: Some(pf),
+        jurors: Some(vec!["mock:x".to_string()]),
+        judge: Some("mock:j".to_string()),
         ..Default::default()
     };
     let empty_toml = dir.path().join("empty.toml");

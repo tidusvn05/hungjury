@@ -20,6 +20,7 @@ fn ctx_with_delay(ms: u64) -> DecideCtx {
         no_memory: true,
         no_cache: true,
         jurors: Some(vec!["mock:a".into(), "mock:b".into(), "mock:c".into()]),
+        judge: Some("mock:j".into()),
         ..CliOverrides::default()
     };
     let cfg = Config::load(&over, None).unwrap();
@@ -89,7 +90,13 @@ fn max_concurrency_from_toml() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("hungjury.toml");
     std::fs::write(&p, "[limits]\ndaily_cap = 2000\nmax_concurrency = 8\n").unwrap();
-    let over = CliOverrides::default();
+    // Config::load falls back to scanning PATH for agent CLIs when jurors/
+    // judge are unset — declare mocks so this works where none exist (CI).
+    let over = CliOverrides {
+        jurors: Some(vec!["mock:x".into()]),
+        judge: Some("mock:j".into()),
+        ..CliOverrides::default()
+    };
     let cfg = Config::load(&over, Some(&p)).unwrap();
     assert_eq!(cfg.limits.max_concurrency, 8);
 }

@@ -14,6 +14,16 @@ fn hj_bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_hungjury"))
 }
 
+/// Overrides with mock jurors/judge — `Config::load*` scans PATH for
+/// agent CLIs when they are unset, which fails where none exist (CI).
+fn mock_over() -> CliOverrides {
+    CliOverrides {
+        jurors: Some(vec!["mock:x".into()]),
+        judge: Some("mock:j".into()),
+        ..CliOverrides::default()
+    }
+}
+
 fn write(p: &Path, s: &str) {
     std::fs::create_dir_all(p.parent().unwrap()).unwrap();
     std::fs::write(p, s).unwrap();
@@ -110,7 +120,7 @@ fn project_dir_becomes_data_dir() {
 
     // HUNGJURY_HOME must not interfere with this assertion.
     without_home(|| {
-        let cfg = Config::load_at(&CliOverrides::default(), None, &nested).unwrap();
+        let cfg = Config::load_at(&mock_over(), None, &nested).unwrap();
         assert_eq!(cfg.data_dir, root.join(".hungjury"));
         assert_eq!(cfg.memory_db, root.join(".hungjury/memory.db"));
         assert_eq!(cfg.project_root.as_deref(), Some(root.as_path()));
@@ -125,7 +135,7 @@ fn hungjury_home_beats_project_dir() {
     let home = dir.path().join("global_home");
 
     with_home(&home, || {
-        let cfg = Config::load_at(&CliOverrides::default(), None, &root).unwrap();
+        let cfg = Config::load_at(&mock_over(), None, &root).unwrap();
         assert_eq!(cfg.data_dir, home);
     });
 }
@@ -139,7 +149,7 @@ fn memory_db_flag_wins_everything() {
 
     let over = CliOverrides {
         memory_db: Some(custom.clone()),
-        ..Default::default()
+        ..mock_over()
     };
     let cfg = Config::load_at(&over, None, &root).unwrap();
     assert_eq!(cfg.memory_db, custom);
@@ -157,7 +167,7 @@ fn toml_paths_resolve_against_toml_dir() {
 
     let nested = root.join("deep/nest");
     std::fs::create_dir_all(&nested).unwrap();
-    let cfg = Config::load_at(&CliOverrides::default(), None, &nested).unwrap();
+    let cfg = Config::load_at(&mock_over(), None, &nested).unwrap();
     assert_eq!(
         cfg.policy_file.as_deref(),
         Some(root.join(".hungjury/rules/pol.md").as_path())
@@ -172,7 +182,7 @@ fn policy_md_auto_detected() {
     let root = dir.path().join("proj");
     write(&root.join(".hungjury/policy.md"), "# auto policy\n");
 
-    let cfg = Config::load_at(&CliOverrides::default(), None, &root).unwrap();
+    let cfg = Config::load_at(&mock_over(), None, &root).unwrap();
     assert_eq!(
         cfg.policy_file.as_deref(),
         Some(root.join(".hungjury/policy.md").as_path())
@@ -187,7 +197,7 @@ fn bare_toml_loads_but_memory_stays_global() {
     write(&root.join("hungjury.toml"), "min_quorum = 3\n");
 
     without_home(|| {
-        let cfg = Config::load_at(&CliOverrides::default(), None, &root).unwrap();
+        let cfg = Config::load_at(&mock_over(), None, &root).unwrap();
         assert_eq!(cfg.min_quorum, 3);
         assert_eq!(cfg.project_root.as_deref(), Some(root.as_path()));
         // No .hungjury/ ⇒ memory stays on the global data dir.
@@ -205,7 +215,7 @@ fn profile_memory_db_resolves_in_project() {
     );
     let over = CliOverrides {
         profile: Some("review".to_string()),
-        ..Default::default()
+        ..mock_over()
     };
     let cfg = Config::load_at(&over, None, &root).unwrap();
     assert_eq!(cfg.memory_db, root.join(".hungjury/memory-review.db"));
