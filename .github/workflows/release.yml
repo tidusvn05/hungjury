@@ -31,7 +31,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - run: cargo test --locked
+      # Surface failures as ::error:: annotations — readable without log access.
+      - name: cargo test --locked
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked 2>&1 | tee /tmp/test.log || {
+            grep -E 'FAILED|panicked at|error\[|error:' /tmp/test.log \
+              | sort -u | head -30 \
+              | while IFS= read -r l; do echo "::error::$l"; done
+            exit 101
+          }
+
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
   build:
