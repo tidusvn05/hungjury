@@ -37,6 +37,22 @@ khác adversarial bench), còn "memory giúp 100%" của run đầu là
 single-run fluke. Cần bộ case lớn hơn (~60+) mới phân biệt được jury vs
 judge vs +memory có ý nghĩa thống kê.
 
+**Đã đo ở n=90** (`hungjury eval ../../bench/adversarial/cases.jsonl` —
+60 cases viết để split jury, cùng qids/policy — `eval-adv-*.json`):
+
+| arm | seed 1 | seed 7 | mean |
+|---|---|---|---|
+| jury | 86.7% | 82.2% | 84.4% |
+| **jury+memory** | **90.0%** | **85.6%** | **87.8%** |
+| judge cold | 91.1% | 85.6% | 88.3% |
+| judge_informed | 91.1% | 87.8% | 89.4% |
+
+**Memory đóng 75–100% gap jury→judge** (+3.3pts cả 2 seeds,
+`go.pass=true` cả hai) — rulings từ train pass nâng jury gần ngang
+judge. Đây là bằng chứng đầu tiên *ổn định* rằng memory giúp khi
+policy-aligned. Lỗi còn lại tập trung ở `frustration` (score off-by-one
+chiếm ~80% mismatches) — score calibration là điểm yếu kế tiếp.
+
 ## pr-review — cổng review trên workspace
 
 ```bash

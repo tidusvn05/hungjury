@@ -1,0 +1,413 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.8555555555555555,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 30
+      },
+      "correct": 77,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 6,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 10,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 18,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 21,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 19332.2,
+      "wall_ms_p95": 27508
+    },
+    "judge_informed": {
+      "accuracy": 0.8777777777777778,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 30
+      },
+      "correct": 79,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 6,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 21,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 19415.066666666666,
+      "wall_ms_p95": 27067
+    },
+    "jury": {
+      "accuracy": 0.8222222222222222,
+      "calls": 90,
+      "calls_by_backend": {
+        "claude": 30,
+        "codex": 30,
+        "devin": 30
+      },
+      "correct": 74,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 1,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 6,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 17,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 21,
+          "expected": 2,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 24,
+          "expected": 0,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 29,
+          "expected": "sales",
+          "got": "technical",
+          "key": "department"
+        },
+        {
+          "case": 28,
+          "expected": "sales",
+          "got": "technical",
+          "key": "department"
+        }
+      ],
+      "wall_ms_mean": 25315.833333333332,
+      "wall_ms_p95": 40498
+    },
+    "jury_memory": {
+      "accuracy": 0.8555555555555555,
+      "calls": 90,
+      "calls_by_backend": {
+        "claude": 30,
+        "codex": 30,
+        "devin": 30
+      },
+      "correct": 77,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 1,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 6,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 17,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 21,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 29903.966666666667,
+      "wall_ms_p95": 47283
+    }
+  },
+  "cases": 60,
+  "config": {
+    "escalate": "Queue",
+    "hung_threshold": 0.5,
+    "judge": "claude:opus@high",
+    "jurors": [
+      "claude:haiku",
+      "codex:gpt-5.6-terra@low",
+      "devin:swe-2-medium"
+    ],
+    "min_quorum": 2,
+    "samples": 1
+  },
+  "go": {
+    "accuracy_gap_jury_to_judge": 0.033333333333333326,
+    "gap_closed_by_memory": 1.0,
+    "hung_rate_drop": 0.0,
+    "pass": true
+  },
+  "label": "adv-s7",
+  "seed": 7,
+  "test": 30,
+  "train": 30
+}

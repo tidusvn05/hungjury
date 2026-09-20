@@ -673,3 +673,17 @@ mất config). Giờ:
   memory trung lập (không poison, không giúp rõ). Run "100%" đầu là
   single-run fluke — multi-seed bắt buộc trước khi kết luận.
 - `go.pass` giờ false (đúng — gap ~0); hung_rate 0 qua các arm.
+
+## 2026-09-20e — n=90 eval: memory giúp thật (aligned policy)
+
+- Chạy `eval` trên `bench/adversarial/cases.jsonl` (60 cases split-jury,
+  cùng qids/policy) trong project support-triage, 2 seeds × n=90/arm:
+  jury 84.4% | **jury+memory 87.8%** | judge 88.3% | judge_informed
+  89.4%. Memory +3.3pts cả hai seeds (`gap_closed_by_memory` 0.75 / 1.0,
+  `go.pass` cả hai) — bằng chứng ổn định đầu tiên memory *giúp* khi
+  policy-aligned, sau loạt fix (provisional, contested, min_quorum).
+- hung_rate 0 mọi arm — adversarial cases chia jurors về ý kiến nhưng
+  chưa đủ để treo ở threshold 0.5.
+- Điểm yếu tiếp theo: `frustration` score off-by-one ≈ 80% mismatches —
+  score calibration (per-level exemplars trong policy?) là chỗ cần cải
+  thiện.
