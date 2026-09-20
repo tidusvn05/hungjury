@@ -444,6 +444,14 @@ fn parse_sets(sets: &[String]) -> hungjury::error::Result<Vec<(String, String)>>
         .collect()
 }
 
+/// Resolve a full id or an unambiguous ≥4-char prefix to an entry id.
+fn resolve_entry_id(store: &Store, id: &str) -> hungjury::error::Result<Option<String>> {
+    if store.get(id)?.is_some() {
+        return Ok(Some(id.to_string()));
+    }
+    store.id_by_prefix(id)
+}
+
 async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> hungjury::error::Result<u8> {
     let cfg = Config::load(over, cfg_path)?;
     let store = Store::open(&cfg.memory_db)?;
@@ -527,10 +535,10 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
             print_entries(&contested);
         }
         MemoryCmd::Resolve { id, accept, reject: _ } => {
-            if store.get(&id)?.is_none() {
-                eprintln!("no entry '{id}'");
+            let Some(id) = resolve_entry_id(&store, &id)? else {
+                eprintln!("no entry matching '{id}' (need ≥4 unambiguous chars)");
                 return Ok(1);
-            }
+            };
             if accept {
                 store.set_status(&id, hungjury::memory::store::Status::Active, None)?;
                 println!("{}", serde_json::json!({"id": id, "status": "active"}));
@@ -539,14 +547,18 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
                 println!("{}", serde_json::json!({"id": id, "forgotten": changed}));
             }
         }
-        MemoryCmd::Show { id } => match store.get(&id)? {
-            Some(e) => print_entries(std::slice::from_ref(&e)),
+        MemoryCmd::Show { id } => match resolve_entry_id(&store, &id)? {
+            Some(id) => print_entries(std::slice::from_ref(&store.get(&id)?.unwrap())),
             None => {
-                eprintln!("no entry '{id}'");
+                eprintln!("no entry matching '{id}' (need ≥4 unambiguous chars)");
                 return Ok(1);
             }
         },
         MemoryCmd::Forget { id } => {
+            let Some(id) = resolve_entry_id(&store, &id)? else {
+                eprintln!("no entry matching '{id}' (need ≥4 unambiguous chars)");
+                return Ok(1);
+            };
             let changed = store.forget(&id)?;
             println!("{}", serde_json::json!({"id": id, "forgotten": changed}));
         }

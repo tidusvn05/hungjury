@@ -767,6 +767,42 @@ fn ruling_ttl_expires_old_entries() {
     assert_eq!(store.get(&pid).unwrap().unwrap().status, Status::Active);
 }
 
+/// `promote_rulings` only lifts judge-sourced entries — imported and
+/// human rulings keep their own trust.
+#[test]
+fn promote_leaves_non_judge_rulings_alone() {
+    let store = Store::open_memory().unwrap();
+    let provisional = {
+        let e = NewEntry {
+            kind: Kind::Ruling,
+            scope: q_scope("q1"),
+            body: serde_json::json!({"text": "provisional lesson"}),
+            text: "provisional lesson".to_string(),
+            source: Source::Judge,
+            trust: 0.4,
+            author: None,
+            origin: None,
+        };
+        store.insert(&e).unwrap().0
+    };
+    let imported = {
+        let e = NewEntry {
+            kind: Kind::Ruling,
+            scope: q_scope("q1"),
+            body: serde_json::json!({"text": "imported lesson"}),
+            text: "imported lesson".to_string(),
+            source: Source::Imported,
+            trust: 0.4,
+            author: None,
+            origin: None,
+        };
+        store.insert(&e).unwrap().0
+    };
+    assert_eq!(store.promote_rulings(&q_scope("q1"), 0.8).unwrap(), 1);
+    assert!((store.get(&provisional).unwrap().unwrap().trust - 0.8).abs() < 1e-9);
+    assert!((store.get(&imported).unwrap().unwrap().trust - 0.4).abs() < 1e-9);
+}
+
 /// `id_by_prefix` resolves a unique 8-char tag; ambiguous → None.
 #[test]
 fn id_prefix_resolution() {

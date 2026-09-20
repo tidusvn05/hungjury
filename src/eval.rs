@@ -113,8 +113,8 @@ struct ArmStats {
     calls: usize,
     /// Calls split by backend (`claude`/`codex`/`devin`).
     calls_by_backend: BTreeMap<String, usize>,
-    /// Estimated USD spent (needs `[costs]` config).
-    est_cost_usd: f64,
+    /// Estimated USD spent (`None` when `[costs]` isn't configured).
+    est_cost_usd: Option<f64>,
     /// Per-case decision wall ms (for mean/p95).
     #[serde(skip)]
     walls: Vec<u64>,
@@ -178,7 +178,7 @@ fn score_response(
 ) {
     stats.walls.push(resp.usage.wall_ms);
     if let Some(c) = resp.usage.est_cost_usd {
-        stats.est_cost_usd += c;
+        *stats.est_cost_usd.get_or_insert(0.0) += c;
     }
     for j in &resp.usage.jurors {
         note_calls(stats, &j.juror, 1 + j.retries as usize);

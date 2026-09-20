@@ -458,9 +458,14 @@ pub fn feedback(
     let Some(store) = &ctx.store else {
         return Err(Error::Memory("memory db unavailable".to_string()));
     };
-    let Some((req_json, resp_json, _)) = store.get_decision(decision_id)? else {
-        return Err(Error::Memory(format!("no decision '{decision_id}'")));
+    let resolved = match store.get_decision(decision_id)? {
+        Some(_) => decision_id.to_string(),
+        None => store
+            .decision_by_prefix(decision_id)?
+            .ok_or_else(|| Error::Memory(format!("no decision '{decision_id}'")))?,
     };
+    let decision_id = resolved.as_str();
+    let (req_json, resp_json, _) = store.get_decision(decision_id)?.unwrap();
     let req = request_from_stored(&req_json)?;
     let resp: Response = serde_json::from_value(resp_json)
         .map_err(|e| Error::Memory(format!("decision response: {e}")))?;

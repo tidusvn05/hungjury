@@ -600,14 +600,37 @@ impl Store {
         })
     }
 
-    /// Raise every active judge ruling on `scope` to at least `trust`
-    /// (re-confirmation of provisional escalation rulings). Returns how
-    /// many entries changed.
+    /// Same prefix rules as `id_by_prefix`, for the `decisions` table —
+    /// lets `feedback`/`memory` commands take the short id printed by
+    /// `decisions --last`.
+    pub fn decision_by_prefix(&self, prefix: &str) -> Result<Option<String>> {
+        if prefix.len() < 4 {
+            return Ok(None);
+        }
+        let like = format!("{}%", prefix.replace(['%', '_'], ""));
+        self.with_conn(|c| {
+            let mut st = c
+                .prepare("SELECT id FROM decisions WHERE id LIKE ?1 LIMIT 2")
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let rows = st
+                .query_map([like], |r| r.get::<_, String>(0))
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            let ids: Vec<String> = rows
+                .collect::<std::result::Result<_, _>>()
+                .map_err(|e| Error::Memory(e.to_string()))?;
+            Ok((ids.len() == 1).then(|| ids.into_iter().next().unwrap()))
+        })
+    }
+
+    /// Raise judge-sourced rulings on `scope` up to `trust`. Only
+    /// judge-written entries below the target are touched — human or
+    /// imported rulings keep their own trust.
     pub fn promote_rulings(&self, scope: &str, trust: f64) -> Result<usize> {
         self.with_conn(|c| {
             c.execute(
-                "UPDATE entries SET trust = MAX(trust, ?2)
-                 WHERE scope = ?1 AND kind = 'ruling' AND status = 'active'",
+                "UPDATE entries SET trust = ?2
+                 WHERE scope = ?1 AND kind = 'ruling' AND status = 'active'
+                   AND source = 'judge' AND trust < ?2",
                 params![scope, trust],
             )
             .map_err(|e| Error::Memory(e.to_string()))

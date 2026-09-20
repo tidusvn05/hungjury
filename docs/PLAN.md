@@ -573,3 +573,14 @@ chúng:
 - **SDK**: `sdk/python/hungjury.py` (`system_one`/`feedback`).
 - Prompt: header memory block nhắc excerpts là data; judge.md hướng dẫn
   `supersedes`.
+
+Polish tiếp theo:
+
+- `promote_rulings` giới hạn `source='judge' AND trust < target` —
+  imported/manual rulings không bị promote nhầm khi một verdict được
+  tái xác nhận.
+- `est_cost_usd` trong eval arms là `null` khi không config `[costs]`
+  (trước đây `0.0`, gây hiểu nhầm "đo được 0").
+- `memory show|resolve|forget` nhận id prefix ≥4 ký tự không nhập
+  nhằng (`resolve_entry_id` — full id trước, prefix sau), đồng nhất
+  với format `[id:…]` mà judge thấy trong prompt.
