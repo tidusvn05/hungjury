@@ -616,3 +616,16 @@ mất config). Giờ:
 `retrieve(..., ns, facts)`, `verify_facts(store, ws, ns, repo)`,
 `commit_judge(..., ns, ...)`, `all_rulings(scope)` (nhận scope verbatim
 — consolidate đi theo scope thực, không tự build lại).
+
+## 2026-09-20 — use-case spikes (examples/)
+
+- `examples/{support-triage,pr-review,log-triage}/` — mỗi cái là một
+  project `.hungjury/` tự chứa (config + policy.md + memory.db riêng,
+  .gitignore sẵn) + `examples/README.md` hướng dẫn chạy/dọn.
+- Spike thật (claude/codex/devin): support-triage batch 4/4 decided
+  đúng policy; log-triage stdin pipe (`--state-file -`) → actionable/
+  flaky/severity đúng; pr-review workspace trên repo thật → jury
+  unanimous needs_review=true, breaking=false, risk=1.
+- `batch` nhận `questions_file` (relative theo cases file) — DRY cho
+  question set dùng chung. `--state-file -` đọc stdin → pipe log CI.
+- README: mục "Use cases thực tế" + "Khi nào nên/không nên dùng".

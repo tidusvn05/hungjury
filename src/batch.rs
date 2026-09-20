@@ -1,7 +1,9 @@
 //! `hungjury batch` — decide every case in a JSONL file, in parallel.
 //!
 //! Input lines are `{"state": <text|{workspace,hint}>, "questions": {...}}`
-//! (any `expected` labels are ignored — this is a runner, not an
+//! — or `"questions_file": "questions.json"` (resolved against the cases
+//! file's directory) when every case shares one question set.
+//! Any `expected` labels are ignored — this is a runner, not an
 //! evaluator). Each decided case appends one JSON line:
 //! `{case, id, answers, decided_by, hung, exit}`; failures become
 //! `{case, error}`. Quota exhaustion fails fast per case (the daily cap
@@ -32,8 +34,30 @@ pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>) -> Result<u8
         let v: serde_json::Value = serde_json::from_str(line).map_err(|e| {
             Error::Request(format!("{} line {}: bad JSON: {e}", cases.display(), i + 1))
         })?;
+        // `questions` inline wins; `questions_file` resolves against the
+        // cases file's directory so a shared question set stays DRY.
+        let questions = match v.get("questions") {
+            Some(q) if !q.is_null() => q.clone(),
+            _ => {
+                let Some(f) = v.get("questions_file").and_then(|x| x.as_str()) else {
+                    return Err(Error::Request(format!(
+                        "{} line {}: needs `questions` or `questions_file`",
+                        cases.display(),
+                        i + 1
+                    )));
+                };
+                let p = cases
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join(f);
+                serde_json::from_str(
+                    &std::fs::read_to_string(&p).map_err(|e| Error::io(&p, e))?,
+                )
+                .map_err(|e| Error::Request(format!("{}: bad JSON: {e}", p.display())))?
+            }
+        };
         let req = Request::from_json(
-            &serde_json::json!({"state": v["state"], "questions": v["questions"]}).to_string(),
+            &serde_json::json!({"state": v["state"], "questions": questions}).to_string(),
         )
         .map_err(|e| Error::Request(format!("{} line {}: {e}", cases.display(), i + 1)))?;
         let label = v.get("case").cloned().unwrap_or(serde_json::json!(i));

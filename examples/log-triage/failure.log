@@ -1,0 +1,12 @@
+2026-01-15T10:23:01Z [test] running suite "payments" (1 of 3)
+2026-01-15T10:23:04Z [test] test_charge_refund_roundtrip ... ok
+2026-01-15T10:23:07Z [test] test_webhook_idempotent ... FAILED
+  ---- test_webhook_idempotent stdout ----
+  thread 'test_webhook_idempotent' panicked at tests/webhook.rs:142:
+  assertion `left == right` failed
+    left:  StatusCode(200)
+   right: StatusCode(409)
+  note: expected duplicate delivery to return 409 Conflict
+2026-01-15T10:23:08Z [test] test_webhook_signature_reject ... ok
+2026-01-15T10:23:09Z [test] 2 failures in suite "payments"
+2026-01-15T10:23:09Z [ci] lane payments exit code 1

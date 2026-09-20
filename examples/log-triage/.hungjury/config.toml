@@ -1,0 +1,5 @@
+# CI/log failure triage.
+jurors = ["claude:haiku", "codex:gpt-5.6-terra@low", "devin:swe-2-medium"]
+judge = "claude:opus@high"
+escalate = "queue"
+min_quorum = 2

@@ -1,0 +1,4 @@
+{"case": "t1", "state": "I was charged twice on my card this morning — please refund the duplicate. This is blocking our payroll run today.", "questions_file": "questions.json"}
+{"case": "t2", "state": "Quick question before we buy: does the team plan include SSO? Also your docs page threw a 500 earlier but it seems fine now.", "questions_file": "questions.json"}
+{"case": "t3", "state": "This is the third time this week the sync job silently dropped records. Honestly beyond frustrated — our audit closes Friday and I need a fix or a workaround by then.", "questions_file": "questions.json"}
+{"case": "t4", "state": "Whenever convenient, could you look at why my invoice shows a weird line item? No rush at all.", "questions_file": "questions.json"}

@@ -845,3 +845,30 @@ async fn batch_decides_and_echoes_case_labels() {
     assert_eq!(lines[1]["case"], "b");
     assert_eq!(lines[0]["decided_by"], "jury");
 }
+
+/// `questions_file` resolves relative to the cases file's directory.
+#[tokio::test]
+async fn batch_loads_shared_questions_file() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("shared.json"),
+        r#"{"q": {"type": "choice", "id": "k.q", "instructions": "i", "criteria": {"x": "1", "y": "2"}}}"#,
+    )
+    .unwrap();
+    let cases = dir.path().join("cases.jsonl");
+    std::fs::write(
+        &cases,
+        r#"{"state": "s1", "questions_file": "shared.json"}"#.to_string() + "\n",
+    )
+    .unwrap();
+    let out = dir.path().join("out.jsonl");
+    let backend = MockBackend::new(|_| Ok(r#"{"q": "y"}"#.to_string()));
+    let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out)).await.unwrap();
+    assert_eq!(code, 0);
+    let line: serde_json::Value =
+        serde_json::from_str(std::fs::read_to_string(&out).unwrap().trim()).unwrap();
+    assert_eq!(line["answers"]["q"]["choice"], "y");
+}

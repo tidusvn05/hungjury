@@ -1,0 +1,22 @@
+{
+  "needs_review": {
+    "type": "noul",
+    "id": "pr.needs_review",
+    "instructions": "Does this change need a careful human review before merge"
+  },
+  "breaking": {
+    "type": "noul",
+    "id": "pr.breaking",
+    "instructions": "Does this change break the public API, schema or config"
+  },
+  "risk": {
+    "type": "score",
+    "id": "pr.risk",
+    "instructions": "Blast radius if this change is wrong",
+    "criteria": [
+      "Cosmetic or fully covered mechanical change",
+      "Logic change with reasonable test coverage",
+      "Auth/payment/data-loss surface or unverifiable change"
+    ]
+  }
+}

@@ -67,7 +67,7 @@ liệu nằm trong thư mục global `~/.local/share/hungjury` (hoặc
 `$HUNGJURY_HOME`):
 
 ```bash
-hungjury decide -q questions.json --state-file ticket.txt
+hungjury decide --questions @questions.json --state-file ticket.txt
 ```
 
 ### Dùng trong project — `.hungjury/`
@@ -151,7 +151,7 @@ Kết quả (stdout, rút gọn):
 `state` cũng có thể là một workspace để agent tự khám phá (chỉ đọc):
 
 ```bash
-hungjury decide -q pr-questions.json --workspace ./my-repo --hint "Xem diff của nhánh hiện tại so với main"
+hungjury decide --questions @pr-questions.json --workspace ./my-repo --hint "Xem diff của nhánh hiện tại so với main"
 ```
 
 **Exit code:** `0` = có quyết định, `2` = jury treo chưa được xử (dùng được ngay trong shell/CI để chuyển cho người), `1` = lỗi.
@@ -221,6 +221,36 @@ feedback(d.id, {"dept": "billing"}, note="correct")
 ```
 
 TypeScript SDK vẫn để sau — cùng hình dạng `system_one(state, questions)`.
+
+## Use cases thực tế
+
+Ba kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
+
+### `support-triage` — phân luồng ticket
+
+- **State**: text ticket; **câu hỏi**: `choice` (department), `score` (frustration), `noul` (is_urgent).
+- **Policy** đóng vai trò quyết định: "request đầu tiên là primary", "ASAP lịch sự không tính urgent". Không có nó, mỗi juror tự vẽ ranh giới → hung nhiều.
+- **`escalate=queue`**: ticket treo vào hàng — người duyệt sau bằng `memory decisions` + `feedback`, hoặc `learn --audit --recent`.
+- Chạy: `hungjury batch cases.jsonl --out results.jsonl` → 1 JSONL với `case`/`answers`/`decided_by`/`exit` — join được về ticket gốc.
+
+### `pr-review` — cổng review trước merge
+
+- **State**: workspace (repo thật); juror được công cụ đọc-code, tự khám phá theo `hint` ("xem diff nhánh này so với main").
+- **Câu hỏi**: `noul` needs_review/breaking, `score` risk.
+- **`escalate=sync`**: PR khó phán → judge mạnh quyết ngay trong luồng, rulings lưu thành án lệ theo `ws:<repo>` scope — repo này càng review càng có context.
+- Chạy: `hungjury decide --questions @questions.json --workspace ../some-repo --hint "…"` — tích hợp CI bằng exit code (`2` = treo → bắt buộc người review).
+
+### `log-triage` — triage log CI/production
+
+- **State**: text log đỏ; **câu hỏi**: `noul` flaky/actionable, `score` severity.
+- Policy phân biệt "infra noise → retry" vs "lỗi thật → dev fix" — hai thứ thường bị model lẫn.
+- Chạy per-failure trong CI: `hungjury decide --state-file failure.log --questions @questions.json`.
+
+### Khi nào nên/không nên dùng
+
+Nên dùng khi câu trả lời **mơ hồ nhưng có rubric**, cần tín hiệu xác suất (confidence/probabilities) và hung là output hợp lệ — triage, gate, enrich. Không dùng cho câu hỏi khách quan chắc chắn (regex/parse được thì code thẳng rẻ hơn) hoặc khi mỗi quyết định sai đều không chấp nhận được mà không có người duyệt.
+
+**Cách chọn tách biệt**: một project, một mục đích → `.hungjury/` + `namespace`; một project nhiều mục đích → `[profiles.X]` với `memory_db` riêng. Luôn viết `policy.md` trước khi bật escalate — benchmark (`docs/BENCHMARK.md`) cho thấy judge lệch policy gây −17pts.
 
 ## Thiết kế
 

@@ -127,7 +127,7 @@ struct DecideArgs {
     /// Inline state text.
     #[arg(long, conflicts_with = "request")]
     state: Option<String>,
-    /// File whose contents are the state text.
+    /// File whose contents are the state text (`-` = stdin).
     #[arg(long, conflicts_with_all = ["request", "state"])]
     state_file: Option<PathBuf>,
     /// Directory judged as a workspace (read-only tools).
@@ -487,9 +487,13 @@ fn build_request(args: &DecideArgs) -> hungjury::error::Result<Request> {
     let state = if let Some(t) = &args.state {
         State::Text(t.clone())
     } else if let Some(f) = &args.state_file {
-        State::Text(
-            std::fs::read_to_string(f).map_err(|e| hungjury::error::Error::io(f, e))?,
-        )
+        // `-` reads state text from stdin — pipes a CI log straight in.
+        State::Text(if f.as_os_str() == "-" {
+            std::io::read_to_string(std::io::stdin())
+                .map_err(|e| hungjury::error::Error::io("stdin", e))?
+        } else {
+            std::fs::read_to_string(f).map_err(|e| hungjury::error::Error::io(f, e))?
+        })
     } else if let Some(w) = &args.workspace {
         State::Workspace {
             path: w.clone(),

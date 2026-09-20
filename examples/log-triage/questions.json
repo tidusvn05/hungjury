@@ -1,0 +1,22 @@
+{
+  "flaky": {
+    "type": "noul",
+    "id": "ci.flaky",
+    "instructions": "Is this a flaky/infra failure rather than a real regression"
+  },
+  "actionable": {
+    "type": "noul",
+    "id": "ci.actionable",
+    "instructions": "Does the log show something a developer can fix"
+  },
+  "severity": {
+    "type": "score",
+    "id": "ci.severity",
+    "instructions": "How bad is this failure",
+    "criteria": [
+      "Flaky or infra noise",
+      "Real failure in one lane",
+      "Release-blocking — whole pipeline red"
+    ]
+  }
+}

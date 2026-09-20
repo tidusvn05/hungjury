@@ -1,0 +1,7 @@
+# Support-triage project config.
+jurors = ["claude:haiku", "codex:gpt-5.6-terra@low", "devin:swe-2-medium"]
+judge = "claude:opus@high"
+escalate = "queue"          # hung tickets land in the human/judge queue
+hung_threshold = 0.5
+min_quorum = 2
+# policy.md in this dir is auto-detected and injected into prompts.
