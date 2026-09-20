@@ -28,7 +28,7 @@ Q = {
         "criteria": {
             "billing": "Payment, charge, refund or subscription money issues",
             "technical": "Bugs, crashes, errors or integration problems",
-            "sales": "Pricing, plan or account questions before purchase",
+            "sales": "Pricing, plan or account questions before purchase — including 'is this a bug or an intended plan limit / what does the upgrade cost?'",
         },
     },
     "frustration": {
@@ -36,15 +36,15 @@ Q = {
         "id": "support.frustration",
         "instructions": "How frustrated the customer appears",
         "criteria": [
-            "Calm, just stating facts",
-            "Frustrated but civil",
-            "Very angry, strong language",
+            "Calm or neutral — purely factual, no annoyance markers at all",
+            "Mild annoyance or civil complaint ('a bit annoying', 'kind of a pain', 'would appreciate a fix') — no strong wording, no penalties named",
+            "Strong wording ('ridiculous', 'unacceptable', 'beyond frustrated') OR names a penalty that lands if unresolved (chargeback, legal obligation, staff sitting idle, escalation threat). A deadline alone counts as urgency, not frustration",
         ],
     },
     "is_urgent": {
         "type": "noul",
         "id": "support.is_urgent",
-        "instructions": "The message conveys urgency or time-sensitivity (deadline, blocking, ASAP)",
+        "instructions": "Real urgency: an explicit deadline OR a consequence that will occur if unresolved (blocking launch, chargeback, staff idle, audit). Courtesy phrases ('ASAP would be nice', 'no rush', 'whenever you can') do NOT count.",
     },
 }
 

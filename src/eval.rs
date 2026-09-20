@@ -125,6 +125,8 @@ struct ArmStats {
     walls: Vec<u64>,
     /// Decided-but-wrong details `{case, key, expected, got}` (cap 20).
     mismatches: Vec<serde_json::Value>,
+    /// Total rulings/precedents/facts injected into juror prompts.
+    memory_injected: usize,
 }
 
 impl ArmStats {
@@ -182,6 +184,8 @@ fn score_response(
     expected: &BTreeMap<String, serde_json::Value>,
 ) {
     stats.walls.push(resp.usage.wall_ms);
+    stats.memory_injected +=
+        resp.memory.rulings + resp.memory.precedents + resp.memory.facts;
     if let Some(c) = resp.usage.est_cost_usd {
         *stats.est_cost_usd.get_or_insert(0.0) += c;
     }
@@ -498,16 +502,24 @@ pub async fn run(
         }
     }
 
-    // Go/no-go.
+    // Go/no-go. When the judge is the ceiling (gap > 0), memory passes
+    // by closing ≥50% of that gap. When it isn't (jury ≥ judge — small
+    // or easy sets can put the jury on top), the meaningful bar is
+    // that memory doesn't drag the jury below its no-memory accuracy.
     let (ja, ma, ga) = (jury_stats.accuracy(), mem_stats.accuracy(), judge_stats.accuracy());
     let gap = ga - ja;
-    let closed = if gap > 0.0 { (ma - ja) / gap } else { 0.0 };
+    let mem_delta = ma - ja;
+    let closed = if gap > 0.0 { mem_delta / gap } else { 0.0 };
     let hung_drop = if jury_stats.hung_rate() > 0.0 {
         (jury_stats.hung_rate() - mem_stats.hung_rate()) / jury_stats.hung_rate()
     } else {
         0.0
     };
-    let go = closed >= 0.5 || (hung_drop >= 0.3 && ma >= ja - 0.001);
+    let go = if gap > 0.0 {
+        closed >= 0.5 || (hung_drop >= 0.3 && ma >= ja - 0.001)
+    } else {
+        ma >= ja - 0.001
+    };
 
     let report_cfg = Config::load(base, config_path)?;
     let report = serde_json::json!({
@@ -533,6 +545,7 @@ pub async fn run(
         "go": {
             "accuracy_gap_jury_to_judge": gap,
             "gap_closed_by_memory": closed,
+            "memory_delta_vs_jury": mem_delta,
             "hung_rate_drop": hung_drop,
             "pass": go,
         }
@@ -569,6 +582,7 @@ fn arm_json(s: &ArmStats) -> serde_json::Value {
         "est_cost_usd": s.est_cost_usd,
         "wall_ms_mean": mean,
         "wall_ms_p95": p95,
+        "memory_injected": s.memory_injected,
         "mismatches": s.mismatches,
     })
 }

@@ -687,3 +687,25 @@ mất config). Giờ:
 - Điểm yếu tiếp theo: `frustration` score off-by-one ≈ 80% mismatches —
   score calibration (per-level exemplars trong policy?) là chỗ cần cải
   thiện.
+
+## 2026-09-20f — self-improve loop: rubric anchors, go semantics
+
+5 lần đo+fix trên adversarial 60-case set (examples/README.md giữ bảng
+đầy đủ):
+
+1. Rubric levels mơ hồ là bottleneck chính — thêm marker words vào
+   `criteria` từng level nâng jury 84→97%. Fix trong `gen.py` +
+   `examples/support-triage/questions.json`.
+2. Boundary phải nói hai chiều: "penalty lands if unresolved" vs
+   "deadline alone = urgency" — phát hiện policy.md gốc mâu thuẫn
+   generator labels ("audit closing" liệt kê là frustration-2 nhưng
+   generator label 0/1).
+3. Memory lan lỗi hệ thống của judge (overshoot rulings → jury
+   overshoot). Header retrieval giờ ghi "on any conflict the policy
+   wins" (retrieve.rs).
+4. `eval` go/no-go đúng khi judge không phải ceiling: gap ≤ 0 → pass
+   ⇔ `memory_delta_vs_jury >= 0` thay vì luôn false. Report thêm
+   `memory_injected` per arm — qua đó phát hiện memory là *conditional*:
+   train pass 0 hung → 0 rulings → jury+mem ≡ jury (s8).
+5. Residual ~1-4% là label-boundary noise — dừng, không siết rubric
+   thêm để tránh overfit generator.

@@ -13,14 +13,20 @@ these in order rather than your own rubric.
 
 ## urgency
 
-- `true` only for an explicit deadline or blocking impact
-  ("renewal Friday", "blocking payroll", "launch in 6 hours").
+- `true` for an explicit deadline or blocking impact
+  ("renewal Friday", "blocking payroll", "launch in 6 hours") — a
+  *named consequence that will occur if unresolved* also counts:
+  "escalates to a chargeback", "200 agents idle until fixed",
+  "audit closes tomorrow" → `true`.
 - Courtesy urgency does NOT count: "ASAP would be nice",
   "whenever you can", "no rush" → `false`.
 
 ## frustration
 
-- `2` — strong language OR polite wording that names hard consequences
-  (chargeback, legal deadline, audit closing).
-- `1` — mild annoyance, civil frustration.
-- `0` — calm, just stating facts.
+- `2` — strong wording ("ridiculous", "unacceptable", "beyond
+  frustrated") OR polite wording that names a *penalty landing if
+  unresolved*: chargeback, legal obligation, staff sitting idle,
+  escalation threat. A deadline alone is urgency, not frustration.
+- `1` — mild annoyance or civil complaint: "a bit annoying",
+  "kind of a pain", "would appreciate a fix".
+- `0` — calm or neutral, purely factual, no annoyance markers.

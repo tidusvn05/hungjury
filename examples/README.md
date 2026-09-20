@@ -49,9 +49,42 @@ judge vs +memory có ý nghĩa thống kê.
 
 **Memory đóng 75–100% gap jury→judge** (+3.3pts cả 2 seeds,
 `go.pass=true` cả hai) — rulings từ train pass nâng jury gần ngang
-judge. Đây là bằng chứng đầu tiên *ổn định* rằng memory giúp khi
-policy-aligned. Lỗi còn lại tập trung ở `frustration` (score off-by-one
-chiếm ~80% mismatches) — score calibration là điểm yếu kế tiếp.
+judge. Lỗi còn lại tập trung ở `frustration` (score off-by-one
+chiếm ~80% mismatches).
+
+**Self-improve loop: 4 vòng đo+fix rubric** (`eval-adv-rubric*.json`):
+
+| vòng | thay đổi | jury | jury+mem | judge | informed |
+|---|---|---|---|---|---|
+| s3 | levels có marker words | 96.7% | 93.3% | 93.3% | 93.3% |
+| s4 | "deadline ≠ penalty" | 97.8% | 98.9% | 98.9% | 100% |
+| s5 | (confirm) | 100% | 96.7% | 97.8% | 97.8% |
+| s6 | rulings phụ thuộc policy | 97.8% | **100%** | 100% | 100% |
+| s8 | (confirm) | 95.6% | 95.6% | 100% | 100% |
+
+Bài học:
+1. **Rubric levels mơ hồ là bottleneck** — "Very angry, strong
+   language" không bắt được "Unacceptable, honestly". Ghi marker words
+   vào `criteria` từng level nâng jury +13pts (84→97%).
+2. **Boundary phải nói cả hai chiều**: "names a penalty landing if
+   unresolved" (chargeback, legal obligation, staff idle) vs "deadline
+   alone = urgency not frustration" — chỉ nói một chiều thì model
+   over-trigger sang deadline cases.
+3. **Memory lan cả lỗi hệ thống của judge** — khi judge overshoot
+   (s3/s5), rulings kéo jury xuống. Header memory giờ ghi "on conflict
+   the policy wins" → jury+mem về 100% (s6) vì rulings chỉ sửa chỗ
+   jury thiếu, không đè policy.
+4. **Memory chỉ engage khi escalation fire** — s8: train pass 0 hung →
+   0 rulings/precedents → `memory_injected=0` → jury+mem ≡ jury. Memory
+   là *conditional benefit*: có giá trị khi rubric yếu/case khó làm jury
+   treo; khi rubric tốt jury đã ~98% thì không còn headroom.
+5. **Residual ~1-4% là label-boundary noise** — "Blocking our launch
+   tomorrow" vừa là deadline vừa là impact; generator label theo slot,
+   semantics thì nhập nhằng. Không nên siết rubric thêm (overfit).
+
+`eval` report giờ có `memory_injected` (số entries đã inject per arm)
+và `go.memory_delta_vs_jury`; `go.pass` đúng cả khi judge không phải
+ceiling (gap ≤ 0 → pass ⇔ memory không kéo jury xuống).
 
 ## pr-review — cổng review trên workspace
 
