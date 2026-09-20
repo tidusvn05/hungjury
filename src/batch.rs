@@ -18,7 +18,11 @@ use crate::jury::{self, DecideCtx};
 use crate::request::Request;
 
 /// One completed case: input index, echoed `case` label, decide result.
-type CaseResult = (usize, serde_json::Value, Result<(crate::response::Response, i32)>);
+type CaseResult = (
+    usize,
+    serde_json::Value,
+    Result<(crate::response::Response, i32)>,
+);
 
 /// Run `decide` over every line of `cases`; write JSONL to `out`
 /// (stdout when `None`). Returns a process exit code: 0 when every case
@@ -50,15 +54,14 @@ pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>) -> Result<u8
 
     let n = cases_v.len();
     let par = ctx.config.limits.max_concurrency.max(1);
-    let results: Vec<CaseResult> =
-        stream::iter(
-            cases_v
-                .into_iter()
-                .map(|(i, label, r)| async move { (i, label, jury::decide(ctx, &r).await) }),
-        )
-        .buffer_unordered(par)
-        .collect()
-        .await;
+    let results: Vec<CaseResult> = stream::iter(
+        cases_v
+            .into_iter()
+            .map(|(i, label, r)| async move { (i, label, jury::decide(ctx, &r).await) }),
+    )
+    .buffer_unordered(par)
+    .collect()
+    .await;
 
     let mut lines = vec![String::new(); n];
     let (mut decided, mut hung, mut failed) = (0usize, 0usize, 0usize);

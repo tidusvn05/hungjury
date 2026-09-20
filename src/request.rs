@@ -34,7 +34,11 @@ impl State {
         match self {
             State::Text(t) => t.clone(),
             State::Workspace { path, hint } => {
-                format!("workspace:{} hint:{}", path.display(), hint.as_deref().unwrap_or(""))
+                format!(
+                    "workspace:{} hint:{}",
+                    path.display(),
+                    hint.as_deref().unwrap_or("")
+                )
             }
         }
     }
@@ -73,9 +77,8 @@ pub struct Request {
 impl Request {
     /// Parse the `{state, questions}` JSON document.
     pub fn from_json(text: &str) -> Result<Request> {
-        let r: RequestIn = serde_json::from_str(text).map_err(|e| {
-            Error::Request(format!("invalid request JSON: {e}"))
-        })?;
+        let r: RequestIn = serde_json::from_str(text)
+            .map_err(|e| Error::Request(format!("invalid request JSON: {e}")))?;
         let state = match r.state {
             StateIn::Text(t) => State::Text(t),
             StateIn::Ws { workspace, hint } => State::Workspace {
@@ -89,7 +92,9 @@ impl Request {
     /// Build + validate.
     pub fn new(state: State, questions: BTreeMap<String, Question>) -> Result<Request> {
         if questions.is_empty() {
-            return Err(Error::Request("at least one question is required".to_string()));
+            return Err(Error::Request(
+                "at least one question is required".to_string(),
+            ));
         }
         for (key, q) in &questions {
             if !valid_key(key) {
@@ -112,24 +117,20 @@ impl Request {
             }
         }
         if let State::Workspace { path, .. } = &state
-            && !path.is_dir() {
-                return Err(Error::Request(format!(
-                    "workspace {} is not a directory",
-                    path.display()
-                )));
-            }
+            && !path.is_dir()
+        {
+            return Err(Error::Request(format!(
+                "workspace {} is not a directory",
+                path.display()
+            )));
+        }
         Ok(Request { state, questions })
     }
 
     /// Build from separate parts (CLI `--state*`/`-q` form).
-    pub fn from_parts(
-        state: State,
-        questions_json: &str,
-    ) -> Result<Request> {
-        let questions: BTreeMap<String, Question> =
-            serde_json::from_str(questions_json).map_err(|e| {
-                Error::Request(format!("invalid questions JSON: {e}"))
-            })?;
+    pub fn from_parts(state: State, questions_json: &str) -> Result<Request> {
+        let questions: BTreeMap<String, Question> = serde_json::from_str(questions_json)
+            .map_err(|e| Error::Request(format!("invalid questions JSON: {e}")))?;
         Request::new(state, questions)
     }
 
@@ -166,10 +167,8 @@ pub fn case_questions(
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new("."))
                 .join(f);
-            serde_json::from_str(
-                &std::fs::read_to_string(&p).map_err(|e| Error::io(&p, e))?,
-            )
-            .map_err(|e| Error::Request(format!("{}: bad JSON: {e}", p.display())))
+            serde_json::from_str(&std::fs::read_to_string(&p).map_err(|e| Error::io(&p, e))?)
+                .map_err(|e| Error::Request(format!("{}: bad JSON: {e}", p.display())))
         }
     }
 }

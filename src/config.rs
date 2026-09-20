@@ -326,11 +326,7 @@ impl Config {
 
     /// `load` with an explicit working directory — tests + callers that
     /// already resolved their cwd.
-    pub fn load_at(
-        cli: &CliOverrides,
-        config_path: Option<&Path>,
-        start: &Path,
-    ) -> Result<Config> {
+    pub fn load_at(cli: &CliOverrides, config_path: Option<&Path>, start: &Path) -> Result<Config> {
         // Walk-up discovery: `.hungjury/` anchors project-local state;
         // `hungjury.toml`/`.hungjury/config.toml` is the project config
         // layer. Either may sit at any ancestor — nearest wins.
@@ -470,7 +466,8 @@ impl Config {
                 .map(|k| k.default_models().0)
                 .collect();
         }
-        if !models_set[1] && cfg.judge.is_empty()
+        if !models_set[1]
+            && cfg.judge.is_empty()
             && let Some(kind) = BackendKind::detect()
         {
             cfg.judge = kind.default_models().1;

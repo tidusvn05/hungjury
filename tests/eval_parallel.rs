@@ -26,7 +26,7 @@ fn ctx_with_delay(ms: u64) -> DecideCtx {
     let canned = |_name: &'static str| -> Arc<dyn AgentBackend> {
         Arc::new(
             MockBackend::new(move |_req| Ok(r#"{"q1": "x", "q2": true, "q3": 1}"#.to_string()))
-            .with_delay(Duration::from_millis(ms)),
+                .with_delay(Duration::from_millis(ms)),
         )
     };
     let mut backends: HashMap<BackendKind, Arc<dyn AgentBackend>> = HashMap::new();
@@ -66,12 +66,10 @@ async fn cases_overlap_under_buffer_unordered() {
         })
         .collect();
     let t0 = Instant::now();
-    let results: Vec<_> = stream::iter(
-        cases.iter().enumerate().map(|(i, c)| {
-            let ctx = &ctx;
-            async move { (i, jury::decide(ctx, c).await) }
-        }),
-    )
+    let results: Vec<_> = stream::iter(cases.iter().enumerate().map(|(i, c)| {
+        let ctx = &ctx;
+        async move { (i, jury::decide(ctx, c).await) }
+    }))
     .buffer_unordered(par)
     .collect()
     .await;

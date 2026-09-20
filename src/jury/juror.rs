@@ -9,9 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::backend::{
-    AgentBackend, AgentRequest, TokenUsage, extract_json, tail,
-};
+use crate::backend::{AgentBackend, AgentRequest, TokenUsage, extract_json, tail};
 use crate::error::Error;
 use crate::question::{Ballot, Question, validate_ballot};
 use crate::quota::{CallRecord, Quota, now_rfc3339};
@@ -70,21 +68,30 @@ pub async fn run_juror(
             retries += 1;
         }
         if let Err(e) = quota.consume().await {
-            return finish(juror, sample, "error", started, retries, Some(e.to_string()), None);
+            return finish(
+                juror,
+                sample,
+                "error",
+                started,
+                retries,
+                Some(e.to_string()),
+                None,
+            );
         }
         req.prompt = format!("{base_prompt}{feedback}");
         let t0 = Instant::now();
-        let response = backend.run(AgentRequest {
-            prompt: req.prompt.clone(),
-            system_prompt: req.system_prompt.clone(),
-            model: req.model.clone(),
-            cwd: req.cwd.clone(),
-            tools: req.tools,
-            timeout: req.timeout,
-            agent: req.agent.clone(),
-            json_schema: req.json_schema.clone(),
-        })
-        .await;
+        let response = backend
+            .run(AgentRequest {
+                prompt: req.prompt.clone(),
+                system_prompt: req.system_prompt.clone(),
+                model: req.model.clone(),
+                cwd: req.cwd.clone(),
+                tools: req.tools,
+                timeout: req.timeout,
+                agent: req.agent.clone(),
+                json_schema: req.json_schema.clone(),
+            })
+            .await;
         let (status, err, usage) = match response {
             Ok(r) => match parse_ballot(&r.text, questions, explain, &req.agent) {
                 Ok((ballots, why)) => {
@@ -139,7 +146,15 @@ pub async fn run_juror(
         );
     }
 
-    let mut run = finish(juror, sample, last_status, started, retries, Some(last_err), None);
+    let mut run = finish(
+        juror,
+        sample,
+        last_status,
+        started,
+        retries,
+        Some(last_err),
+        None,
+    );
     run.retries = retries;
     run
 }

@@ -60,19 +60,34 @@ fn walkup_finds_hungjury_dir_and_toml() {
     write(&root.join("hungjury.toml"), "judge = \"mock:j\"\n");
 
     let found = discover_project(&nested);
-    assert_eq!(found.hungjury_dir.as_deref(), Some(root.join(".hungjury").as_path()));
-    assert_eq!(found.toml.as_deref(), Some(root.join("hungjury.toml").as_path()));
+    assert_eq!(
+        found.hungjury_dir.as_deref(),
+        Some(root.join(".hungjury").as_path())
+    );
+    assert_eq!(
+        found.toml.as_deref(),
+        Some(root.join("hungjury.toml").as_path())
+    );
 }
 
 #[test]
 fn hungjury_config_toml_preferred_over_flat() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("proj");
-    write(&root.join(".hungjury/config.toml"), "judge = \"mock:nested\"\n");
+    write(
+        &root.join(".hungjury/config.toml"),
+        "judge = \"mock:nested\"\n",
+    );
     write(&root.join("hungjury.toml"), "judge = \"mock:flat\"\n");
 
     let found = discover_project(&root);
-    assert!(found.toml.as_deref().unwrap().ends_with(".hungjury/config.toml"));
+    assert!(
+        found
+            .toml
+            .as_deref()
+            .unwrap()
+            .ends_with(".hungjury/config.toml")
+    );
 }
 
 #[test]
@@ -143,7 +158,10 @@ fn toml_paths_resolve_against_toml_dir() {
     let nested = root.join("deep/nest");
     std::fs::create_dir_all(&nested).unwrap();
     let cfg = Config::load_at(&CliOverrides::default(), None, &nested).unwrap();
-    assert_eq!(cfg.policy_file.as_deref(), Some(root.join(".hungjury/rules/pol.md").as_path()));
+    assert_eq!(
+        cfg.policy_file.as_deref(),
+        Some(root.join(".hungjury/rules/pol.md").as_path())
+    );
     assert_eq!(cfg.memory_db, root.join(".hungjury/mem.db"));
     assert!(cfg.policy.is_some());
 }
@@ -155,7 +173,10 @@ fn policy_md_auto_detected() {
     write(&root.join(".hungjury/policy.md"), "# auto policy\n");
 
     let cfg = Config::load_at(&CliOverrides::default(), None, &root).unwrap();
-    assert_eq!(cfg.policy_file.as_deref(), Some(root.join(".hungjury/policy.md").as_path()));
+    assert_eq!(
+        cfg.policy_file.as_deref(),
+        Some(root.join(".hungjury/policy.md").as_path())
+    );
     assert_eq!(cfg.policy.as_deref(), Some("# auto policy"));
 }
 
@@ -227,12 +248,12 @@ fn namespace_partitions_scopes() {
 #[test]
 fn init_scaffolds_and_is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
-    let out = hj_bin()
-        .arg("init")
-        .arg(dir.path())
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = hj_bin().arg("init").arg(dir.path()).output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     for f in ["config.toml", "policy.md", ".gitignore"] {
         assert!(dir.path().join(".hungjury").join(f).is_file(), "{f}");
     }

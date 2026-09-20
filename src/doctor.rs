@@ -76,10 +76,14 @@ pub async fn run(cfg: Option<&Config>, cfg_err: Option<&str>, json: bool) -> i32
                 name: "project".to_string(),
                 ok: true,
                 detail: match &c.project_root {
-                    Some(r) => format!("root {} (policy: {})",
+                    Some(r) => format!(
+                        "root {} (policy: {})",
                         r.display(),
-                        c.policy_file.as_deref().map(|p| p.display().to_string())
-                            .unwrap_or_else(|| "none".into())),
+                        c.policy_file
+                            .as_deref()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|| "none".into())
+                    ),
                     None => "none — global memory".to_string(),
                 },
             });
@@ -103,39 +107,51 @@ pub async fn run(cfg: Option<&Config>, cfg_err: Option<&str>, json: bool) -> i32
         }),
     }
 
-    // 4. Memory db + FTS5.
+    // 4. Memory db + FTS5. Doctor is a diagnostic — don't create the
+    // db as a side effect of checking it (`Store::open` creates the
+    // file, schema, and machine id when absent).
     if let Some(c) = cfg {
-        match Store::open(&c.memory_db) {
-            Ok(s) => {
-                let fts = s.has_fts5();
-                checks.push(Check {
-                    name: "memory_db".to_string(),
-                    ok: true,
-                    detail: format!("{} ({} entries)", c.memory_db.display(), entry_count(&s)),
-                });
-                checks.push(Check {
-                    name: "memory_fts5".to_string(),
-                    ok: fts,
-                    detail: if fts {
-                        "available".to_string()
-                    } else {
-                        "missing — precedent search disabled".to_string()
-                    },
-                });
-                // Engagement: rulings only exist when escalation fired or
-                // `learn --audit` ran — a db full of jury decisions with
-                // zero rulings means memory can't add anything yet.
-                let decisions = s.decisions_len().unwrap_or(0);
-                let rulings = s
-                    .counts()
-                    .map(|v| {
-                        v.iter()
-                            .filter(|(k, st, _)| k == "ruling" && st == "active")
-                            .map(|(_, _, n)| *n)
-                            .sum::<i64>()
-                    })
-                    .unwrap_or(0);
-                checks.push(Check {
+        if !c.memory_db.exists() {
+            checks.push(Check {
+                name: "memory_db".to_string(),
+                ok: true,
+                detail: format!(
+                    "{} (not created yet — first decide will)",
+                    c.memory_db.display()
+                ),
+            });
+        } else {
+            match Store::open(&c.memory_db) {
+                Ok(s) => {
+                    let fts = s.has_fts5();
+                    checks.push(Check {
+                        name: "memory_db".to_string(),
+                        ok: true,
+                        detail: format!("{} ({} entries)", c.memory_db.display(), entry_count(&s)),
+                    });
+                    checks.push(Check {
+                        name: "memory_fts5".to_string(),
+                        ok: fts,
+                        detail: if fts {
+                            "available".to_string()
+                        } else {
+                            "missing — precedent search disabled".to_string()
+                        },
+                    });
+                    // Engagement: rulings only exist when escalation fired or
+                    // `learn --audit` ran — a db full of jury decisions with
+                    // zero rulings means memory can't add anything yet.
+                    let decisions = s.decisions_len().unwrap_or(0);
+                    let rulings = s
+                        .counts()
+                        .map(|v| {
+                            v.iter()
+                                .filter(|(k, st, _)| k == "ruling" && st == "active")
+                                .map(|(_, _, n)| *n)
+                                .sum::<i64>()
+                        })
+                        .unwrap_or(0);
+                    checks.push(Check {
                     name: "memory_engagement".to_string(),
                     ok: !(decisions >= 20 && rulings == 0),
                     detail: if decisions >= 20 && rulings == 0 {
@@ -144,12 +160,13 @@ pub async fn run(cfg: Option<&Config>, cfg_err: Option<&str>, json: bool) -> i32
                         format!("{decisions} decisions, {rulings} active rulings")
                     },
                 });
+                }
+                Err(e) => checks.push(Check {
+                    name: "memory_db".to_string(),
+                    ok: false,
+                    detail: format!("{}: {e}", c.memory_db.display()),
+                }),
             }
-            Err(e) => checks.push(Check {
-                name: "memory_db".to_string(),
-                ok: false,
-                detail: format!("{}: {e}", c.memory_db.display()),
-            }),
         }
     }
 
@@ -202,15 +219,29 @@ pub async fn run(cfg: Option<&Config>, cfg_err: Option<&str>, json: bool) -> i32
         println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
     } else {
         for c in &checks {
-            eprintln!("{} {:<14} {}", if c.ok { "ok " } else { "FAIL" }, c.name, c.detail);
+            eprintln!(
+                "{} {:<14} {}",
+                if c.ok { "ok " } else { "FAIL" },
+                c.name,
+                c.detail
+            );
         }
-        eprintln!("{}", if all_ok { "doctor: all checks passed" } else { "doctor: failures above" });
+        eprintln!(
+            "{}",
+            if all_ok {
+                "doctor: all checks passed"
+            } else {
+                "doctor: failures above"
+            }
+        );
     }
     if all_ok { 0 } else { 1 }
 }
 
 fn entry_count(s: &Store) -> i64 {
-    s.counts().map(|v| v.iter().map(|(_, _, n)| *n).sum()).unwrap_or(0)
+    s.counts()
+        .map(|v| v.iter().map(|(_, _, n)| *n).sum())
+        .unwrap_or(0)
 }
 
 fn mk_writable(p: &Path) -> bool {

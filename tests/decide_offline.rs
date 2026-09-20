@@ -55,12 +55,18 @@ async fn unanimous_jury_decides() {
         ("juror:mock:b", r#"{"dept": "technical", "refund": true}"#),
         ("juror:mock:c", r#"{"dept": "technical", "refund": true}"#),
     ]);
-    let ctx = ctx_with(cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j"), backend);
+    let ctx = ctx_with(
+        cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j"),
+        backend,
+    );
     let (resp, code) = decide(&ctx, &req()).await.unwrap();
     assert_eq!(code, 0);
     assert_eq!(resp.decided_by, DecidedBy::Jury);
     assert!(resp.hung.is_empty());
-    let AnswerOut::Choice { choice, confidence, .. } = &resp.answers["dept"] else {
+    let AnswerOut::Choice {
+        choice, confidence, ..
+    } = &resp.answers["dept"]
+    else {
         panic!()
     };
     assert_eq!(choice, "technical");
@@ -147,7 +153,10 @@ async fn hung_jury_sync_judge_resolves_and_writes_memory() {
     assert_eq!(judge.status, "ok");
     assert!(!judge.wrote.is_empty());
     // Judge verdict rides inside the answer.
-    let AnswerOut::Choice { judge: Some(jv), .. } = &resp.answers["dept"] else {
+    let AnswerOut::Choice {
+        judge: Some(jv), ..
+    } = &resp.answers["dept"]
+    else {
         panic!("expected judge verdict on dept")
     };
     assert_eq!(jv.choice.as_deref(), Some("technical"));

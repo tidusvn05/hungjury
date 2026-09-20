@@ -367,9 +367,9 @@ impl Store {
             let mut rows = st
                 .query_map([key], |r| r.get::<_, String>(0))
                 .map_err(|e| Error::Memory(e.to_string()))?;
-            rows.next().transpose().map_err(|e| {
-                Error::Memory(e.to_string())
-            })
+            rows.next()
+                .transpose()
+                .map_err(|e| Error::Memory(e.to_string()))
         })
     }
 
@@ -378,7 +378,10 @@ impl Store {
         if let Some(id) = self.meta("machine_id")? {
             return Ok(id);
         }
-        let id = format!("m_{}", &crate::util::sha256_str(&crate::quota::now_rfc3339())[..16]);
+        let id = format!(
+            "m_{}",
+            &crate::util::sha256_str(&crate::quota::now_rfc3339())[..16]
+        );
         self.set_meta_if_absent("machine_id", &id)?;
         Ok(id)
     }
@@ -389,11 +392,9 @@ impl Store {
         let id = e.id();
         self.with_conn(|c| {
             let existing: Option<String> = c
-                .query_row(
-                    "SELECT status FROM entries WHERE id = ?1",
-                    [&id],
-                    |r| r.get(0),
-                )
+                .query_row("SELECT status FROM entries WHERE id = ?1", [&id], |r| {
+                    r.get(0)
+                })
                 .ok();
             if existing.is_some() {
                 return Ok((id, false));
@@ -467,7 +468,13 @@ impl Store {
     }
 
     /// FTS5 BM25 precedents for `q:<qid>` matching `fts_query`, top `k`.
-    pub fn precedents(&self, ns: Option<&str>, qid: &str, fts_query: &str, k: usize) -> Result<Vec<Entry>> {
+    pub fn precedents(
+        &self,
+        ns: Option<&str>,
+        qid: &str,
+        fts_query: &str,
+        k: usize,
+    ) -> Result<Vec<Entry>> {
         if fts_query.trim().is_empty() {
             return Ok(vec![]);
         }
@@ -501,9 +508,7 @@ impl Store {
         if fts_query.trim().is_empty() {
             return Ok(vec![]);
         }
-        let scope_clause = scope
-            .map(|_| "AND e.scope = ?3")
-            .unwrap_or("");
+        let scope_clause = scope.map(|_| "AND e.scope = ?3").unwrap_or("");
         let sql = format!(
             "SELECT e.id, e.kind, e.scope, e.body, e.text, e.source, e.trust,
                     e.author, e.origin, e.created_at, e.status, e.superseded_by
@@ -520,7 +525,12 @@ impl Store {
     }
 
     /// List entries (for `memory list` / export), newest last.
-    pub fn list(&self, kind: Option<Kind>, scope: Option<&str>, active_only: bool) -> Result<Vec<Entry>> {
+    pub fn list(
+        &self,
+        kind: Option<Kind>,
+        scope: Option<&str>,
+        active_only: bool,
+    ) -> Result<Vec<Entry>> {
         let mut sql = String::from(
             "SELECT id, kind, scope, body, text, source, trust, author, origin,
                     created_at, status, superseded_by FROM entries WHERE 1=1",
@@ -755,7 +765,10 @@ impl Store {
     }
 
     /// A stored decision `(request_json, response_json, decided_by)`.
-    pub fn get_decision(&self, id: &str) -> Result<Option<(serde_json::Value, serde_json::Value, String)>> {
+    pub fn get_decision(
+        &self,
+        id: &str,
+    ) -> Result<Option<(serde_json::Value, serde_json::Value, String)>> {
         self.with_conn(|c| {
             let mut st = c
                 .prepare("SELECT request, response, decided_by FROM decisions WHERE id = ?1")
@@ -844,8 +857,7 @@ impl Store {
                             id,
                             created_at: ts,
                             decided_by: by,
-                            request: serde_json::from_str(&req)
-                                .unwrap_or(serde_json::Value::Null),
+                            request: serde_json::from_str(&req).unwrap_or(serde_json::Value::Null),
                             response: serde_json::from_str(&resp)
                                 .unwrap_or(serde_json::Value::Null),
                         })
@@ -1025,11 +1037,7 @@ impl Store {
         })
     }
 
-    fn select_entries(
-        &self,
-        sql: &str,
-        params: impl rusqlite::Params,
-    ) -> Result<Vec<Entry>> {
+    fn select_entries(&self, sql: &str, params: impl rusqlite::Params) -> Result<Vec<Entry>> {
         self.with_conn(|c| {
             let mut st = c.prepare(sql).map_err(|e| Error::Memory(e.to_string()))?;
             let rows = st

@@ -77,15 +77,16 @@ pub fn retrieve(
     let mut entry_ids = Vec::new();
     let cap = cfg.memory_char_cap;
 
-    let push_line = |line: &str, block: &mut String, used_ids: &mut Vec<String>, id: &str| -> bool {
-        if block.len() + line.len() + 1 > cap {
-            return false;
-        }
-        block.push_str(line);
-        block.push('\n');
-        used_ids.push(id.to_string());
-        true
-    };
+    let push_line =
+        |line: &str, block: &mut String, used_ids: &mut Vec<String>, id: &str| -> bool {
+            if block.len() + line.len() + 1 > cap {
+                return false;
+            }
+            block.push_str(line);
+            block.push('\n');
+            used_ids.push(id.to_string());
+            true
+        };
 
     if per_q.values().any(|(r, p)| !r.is_empty() || !p.is_empty()) || !facts.is_empty() {
         block.push_str(

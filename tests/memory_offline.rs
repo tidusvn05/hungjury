@@ -117,7 +117,10 @@ fn default_export_excludes_precedents() {
     let n = bundle::export(&store, &path, None, false).unwrap();
     assert_eq!(n, 1); // only the ruling
     let text = std::fs::read_to_string(&path).unwrap();
-    assert!(!text.contains("state_excerpt"), "state excerpt leaked: {text}");
+    assert!(
+        !text.contains("state_excerpt"),
+        "state excerpt leaked: {text}"
+    );
     // --include-cases includes it.
     let path2 = dir.path().join("b2.jsonl");
     let n2 = bundle::export(&store, &path2, None, true).unwrap();
@@ -241,7 +244,13 @@ async fn learn_queue_judges_hung() {
     learn::learn_queue(&ctx, false).await.unwrap();
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
     assert_eq!(store.queue_len().unwrap(), 0);
-    assert_eq!(store.all_rulings(&q_scope(None, "support.dept")).unwrap().len(), 1);
+    assert_eq!(
+        store
+            .all_rulings(&q_scope(None, "support.dept"))
+            .unwrap()
+            .len(),
+        1
+    );
     let precs = store.list(Some(Kind::Precedent), None, true).unwrap();
     assert_eq!(precs.len(), 1); // one per hung key
     // Both jurors got stat'd against the judge verdict.
@@ -284,7 +293,11 @@ async fn judge_override_of_decided_jury_marks_contested() {
             .to_string());
         }
         let dept = r#""billing""#;
-        let urgent = if req.agent.contains("mock:a") { "true" } else { "false" };
+        let urgent = if req.agent.contains("mock:a") {
+            "true"
+        } else {
+            "false"
+        };
         Ok(format!(r#"{{"dept": {dept}, "urgent": {urgent}}}"#))
     });
     let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
@@ -295,7 +308,10 @@ async fn judge_override_of_decided_jury_marks_contested() {
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
     let all = store.list(Some(Kind::Ruling), None, false).unwrap();
     assert_eq!(all.len(), 2);
-    let dept_ruling = all.iter().find(|e| e.text.contains("always technical")).unwrap();
+    let dept_ruling = all
+        .iter()
+        .find(|e| e.text.contains("always technical"))
+        .unwrap();
     let urg_ruling = all.iter().find(|e| e.text.contains("urgent")).unwrap();
     assert_eq!(dept_ruling.status, Status::Contested); // overrode decided jury
     assert_eq!(urg_ruling.status, Status::Active); // hung jury — escalation's job
@@ -330,7 +346,11 @@ async fn judge_agreement_keeps_ruling_active() {
             }"#
             .to_string());
         }
-        let urgent = if req.agent.contains("mock:a") { "true" } else { "false" };
+        let urgent = if req.agent.contains("mock:a") {
+            "true"
+        } else {
+            "false"
+        };
         Ok(format!(r#"{{"dept": "billing", "urgent": {urgent}}}"#))
     });
     let mut c = cfg(&dir, &["mock:a", "mock:b", "mock:c"], "mock:j");
@@ -364,8 +384,13 @@ async fn feedback_writes_human_precedent() {
     let ctx = ctx_with(c, backend);
     let (resp, _) = decide(&ctx, &req).await.unwrap();
 
-    learn::feedback(&ctx, &resp.id, &[("dept".to_string(), "\"technical\"".to_string())], Some("human says tech"))
-        .unwrap();
+    learn::feedback(
+        &ctx,
+        &resp.id,
+        &[("dept".to_string(), "\"technical\"".to_string())],
+        Some("human says tech"),
+    )
+    .unwrap();
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
     let precs = store.list(Some(Kind::Precedent), None, true).unwrap();
     assert_eq!(precs.len(), 1);
@@ -373,7 +398,10 @@ async fn feedback_writes_human_precedent() {
     assert_eq!(precs[0].source, Source::Human);
     // mock:a voted billing but the human verdict is technical → disagree.
     let rows = store.juror_stats_rows().unwrap();
-    assert_eq!(rows[0], ("mock:a".to_string(), "support.dept".to_string(), 1, 0));
+    assert_eq!(
+        rows[0],
+        ("mock:a".to_string(), "support.dept".to_string(), 1, 0)
+    );
 }
 
 /// Juror weight flips the vote once stats cross n≥10.
@@ -383,7 +411,9 @@ async fn juror_weight_changes_aggregation() {
     let store = Store::open(&dir.path().join("memory.db")).unwrap();
     // mock:a disagreed with ground truth 0/12 → weight (0+1)/(12+2) ≈ 0.07.
     for _ in 0..12 {
-        store.juror_stats_update("mock:a", "support.dept", false).unwrap();
+        store
+            .juror_stats_update("mock:a", "support.dept", false)
+            .unwrap();
     }
     let w_a = store.juror_weight("mock:a", "support.dept").unwrap();
     assert!(w_a < 0.1);
@@ -410,7 +440,12 @@ async fn juror_weight_changes_aggregation() {
     c.no_cache = true;
     let ctx = ctx_with(c, backend);
     let (resp, _) = decide(&ctx, &req).await.unwrap();
-    let hungjury::response::AnswerOut::Choice { choice, probabilities, .. } = &resp.answers["dept"] else {
+    let hungjury::response::AnswerOut::Choice {
+        choice,
+        probabilities,
+        ..
+    } = &resp.answers["dept"]
+    else {
         panic!()
     };
     assert_eq!(choice, "billing");
@@ -439,7 +474,12 @@ async fn consolidate_supersedes_old_rulings() {
     assert_eq!(active.len(), 2);
     assert_eq!(active[0].body["text"], "merged rule A");
     let all = store.list(Some(Kind::Ruling), None, false).unwrap();
-    assert_eq!(all.iter().filter(|e| e.status == Status::Superseded).count(), 10);
+    assert_eq!(
+        all.iter()
+            .filter(|e| e.status == Status::Superseded)
+            .count(),
+        10
+    );
 }
 
 /// `feedback` on a decided answer: agreement leaves rulings active;
@@ -480,12 +520,24 @@ async fn feedback_contradiction_demotes_judge_rulings() {
     let hid = store.insert(&he).unwrap().0;
 
     // Agreement → nothing contested.
-    let n = learn::feedback(&ctx, &resp.id, &[("dept".into(), "\"billing\"".into())], None).unwrap();
+    let n = learn::feedback(
+        &ctx,
+        &resp.id,
+        &[("dept".into(), "\"billing\"".into())],
+        None,
+    )
+    .unwrap();
     assert_eq!(n, 0);
     assert_eq!(store.get(&jid).unwrap().unwrap().status, Status::Active);
 
     // Contradiction → judge ruling contested, human ruling survives.
-    let n = learn::feedback(&ctx, &resp.id, &[("dept".into(), "\"technical\"".into())], None).unwrap();
+    let n = learn::feedback(
+        &ctx,
+        &resp.id,
+        &[("dept".into(), "\"technical\"".into())],
+        None,
+    )
+    .unwrap();
     assert_eq!(n, 1);
     assert_eq!(store.get(&jid).unwrap().unwrap().status, Status::Contested);
     assert_eq!(store.get(&hid).unwrap().unwrap().status, Status::Active);
@@ -544,7 +596,13 @@ fn decisions_listing_and_recent() {
     let store = Store::open_memory().unwrap();
     for (id, by) in [("d1", "jury"), ("d2", "judge"), ("d3", "jury")] {
         store
-            .record_decision(id, "h", &serde_json::json!({}), &serde_json::json!({"id": id}), by)
+            .record_decision(
+                id,
+                "h",
+                &serde_json::json!({}),
+                &serde_json::json!({"id": id}),
+                by,
+            )
             .unwrap();
     }
     let rows = store.list_decisions(10).unwrap();
@@ -610,7 +668,10 @@ async fn min_quorum_hangs_single_juror() {
     c.escalate = Escalate::Off;
     c.min_quorum = 1;
     c.no_cache = true;
-    let ctx = ctx_with(c, MockBackend::new(|_| Ok(r#"{"dept": "billing"}"#.to_string())));
+    let ctx = ctx_with(
+        c,
+        MockBackend::new(|_| Ok(r#"{"dept": "billing"}"#.to_string())),
+    );
     let (resp, code) = decide(&ctx, &req).await.unwrap();
     assert_eq!(code, 0);
     assert!(resp.hung.is_empty());
@@ -833,7 +894,9 @@ async fn batch_decides_and_echoes_case_labels() {
     let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
     c.escalate = Escalate::Off;
     let ctx = ctx_with(c, backend);
-    let code = hungjury::batch::run(&ctx, &cases, Some(&out)).await.unwrap();
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out))
+        .await
+        .unwrap();
     assert_eq!(code, 0);
     let lines: Vec<serde_json::Value> = std::fs::read_to_string(&out)
         .unwrap()
@@ -866,7 +929,9 @@ async fn batch_loads_shared_questions_file() {
     let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
     c.escalate = Escalate::Off;
     let ctx = ctx_with(c, backend);
-    let code = hungjury::batch::run(&ctx, &cases, Some(&out)).await.unwrap();
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out))
+        .await
+        .unwrap();
     assert_eq!(code, 0);
     let line: serde_json::Value =
         serde_json::from_str(std::fs::read_to_string(&out).unwrap().trim()).unwrap();

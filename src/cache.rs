@@ -71,9 +71,7 @@ impl Cache {
         std::fs::read_dir(&self.dir)
             .map(|it| {
                 it.filter_map(|e| e.ok())
-                    .filter(|e| {
-                        e.path().extension().is_some_and(|x| x == "json")
-                    })
+                    .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
                     .count()
             })
             .unwrap_or(0)

@@ -54,8 +54,7 @@ fn jaccard(a: &BTreeSet<String>, b: &BTreeSet<String>) -> f64 {
 /// "criteria": ...}}`). Prints warnings; returns their count.
 pub fn run(path: &Path) -> Result<u8> {
     let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-    let warns = lint_text(&text)
-        .map_err(|e| Error::Request(format!("{path:?}: {e}")))?;
+    let warns = lint_text(&text).map_err(|e| Error::Request(format!("{path:?}: {e}")))?;
 
     if warns.is_empty() {
         eprintln!("lint: no warnings");
@@ -74,6 +73,12 @@ fn lint_text(text: &str) -> std::result::Result<Vec<Warn>, String> {
         serde_json::from_str(text).map_err(|e| format!("invalid questions JSON: {e}"))?;
 
     let mut warns: Vec<Warn> = Vec::new();
+    if qs.is_empty() {
+        warns.push(Warn {
+            key: "*".into(),
+            msg: "no questions defined".into(),
+        });
+    }
     for (key, q) in &qs {
         let ty = q["type"].as_str().unwrap_or("");
         let instr = q["instructions"].as_str().unwrap_or("");
@@ -90,7 +95,10 @@ fn lint_text(text: &str) -> std::result::Result<Vec<Warn>, String> {
                     .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
                     .unwrap_or_default();
                 if levels.is_empty() {
-                    warns.push(Warn { key: key.clone(), msg: "score question has no level descriptions".into() });
+                    warns.push(Warn {
+                        key: key.clone(),
+                        msg: "score question has no level descriptions".into(),
+                    });
                     continue;
                 }
                 for (i, lv) in levels.iter().enumerate() {
@@ -120,7 +128,11 @@ fn lint_text(text: &str) -> std::result::Result<Vec<Warn>, String> {
             "choice" => {
                 let crit: Vec<(&str, &str)> = q["criteria"]
                     .as_object()
-                    .map(|o| o.iter().filter_map(|(k, v)| v.as_str().map(|d| (k.as_str(), d))).collect())
+                    .map(|o| {
+                        o.iter()
+                            .filter_map(|(k, v)| v.as_str().map(|d| (k.as_str(), d)))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 for (name, desc) in &crit {
                     if desc.len() < 15 {
@@ -174,7 +186,10 @@ mod tests {
         let w = lint_text(q).unwrap();
         // abstract levels + missing top-level exclusion + noul no-exclusion
         assert!(w.len() >= 4, "{w:?}");
-        assert!(w.iter().any(|x| x.msg.contains("abstract") || x.msg.contains("marker")));
+        assert!(
+            w.iter()
+                .any(|x| x.msg.contains("abstract") || x.msg.contains("marker"))
+        );
         assert!(w.iter().any(|x| x.msg.contains("exclusion")));
     }
 

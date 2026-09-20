@@ -20,6 +20,30 @@ fn request_from_stored(v: &serde_json::Value) -> Result<Request> {
     Request::from_json(&v.to_string())
 }
 
+/// Parse a stored decision's request+response for batch loops — one
+/// corrupt row must not abort the whole audit/queue run, so failures
+/// log and skip instead of propagating.
+fn parse_stored(
+    id: &str,
+    req_json: &serde_json::Value,
+    resp_json: serde_json::Value,
+) -> Option<(Request, Response)> {
+    let req = match request_from_stored(req_json) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("  {id}: skipping — request: {e}");
+            return None;
+        }
+    };
+    match serde_json::from_value(resp_json) {
+        Ok(r) => Some((req, r)),
+        Err(e) => {
+            eprintln!("  {id}: skipping — response: {e}");
+            None
+        }
+    }
+}
+
 /// Rebuild `(juror_name → ballots)` from a stored response's usage block.
 fn juror_ballots_from_stored(
     resp: &Response,
@@ -62,9 +86,7 @@ fn disagreed_keys(call: &JudgeCall, resp: &Response) -> Vec<String> {
             {
                 keys.push(key.clone())
             }
-            (Some(AnswerOut::Noul { noul, .. }), Ballot::Noul(b))
-                if (*noul >= 0.5) != *b =>
-            {
+            (Some(AnswerOut::Noul { noul, .. }), Ballot::Noul(b)) if (*noul >= 0.5) != *b => {
                 keys.push(key.clone())
             }
             (None, _) => keys.push(key.clone()),
@@ -82,7 +104,12 @@ async fn rejudge(
     req: &Request,
     resp: &Response,
     judge_keys: &[String],
-) -> Option<(JudgeCall, Vec<(String, BTreeMap<String, Ballot>)>, Option<std::path::PathBuf>, Option<String>)> {
+) -> Option<(
+    JudgeCall,
+    Vec<(String, BTreeMap<String, Ballot>)>,
+    Option<std::path::PathBuf>,
+    Option<String>,
+)> {
     let juror_ballots = juror_ballots_from_stored(resp, &req.questions);
     let ws_path = match &req.state {
         State::Workspace { path, .. } => Some(path.clone()),
@@ -90,9 +117,15 @@ async fn rejudge(
     };
     let repo_id = ws_path.as_deref().map(crate::memory::workspace::repo_id);
     // Fresh retrieval: later cases see what earlier judged cases taught.
-    let memory_block = crate::memory::retrieve::retrieve(store, req, &ctx.config.memory, ctx.config.namespace.as_deref(), None)
-        .map(|r| r.block)
-        .unwrap_or_default();
+    let memory_block = crate::memory::retrieve::retrieve(
+        store,
+        req,
+        &ctx.config.memory,
+        ctx.config.namespace.as_deref(),
+        None,
+    )
+    .map(|r| r.block)
+    .unwrap_or_default();
     let (call, usage) = judge::judge_call(
         ctx,
         req,
@@ -105,7 +138,11 @@ async fn rejudge(
     )
     .await;
     if usage.status != "ok" {
-        eprintln!("judge failed for {}: {}", resp.id, usage.error.unwrap_or_default());
+        eprintln!(
+            "judge failed for {}: {}",
+            resp.id,
+            usage.error.unwrap_or_default()
+        );
     }
     call.map(|c| (c, juror_ballots, ws_path, repo_id))
 }
@@ -124,9 +161,9 @@ pub async fn learn_queue(ctx: &DecideCtx, dry_run: bool) -> Result<()> {
             let _ = store.queue_done(id);
             continue;
         };
-        let req = request_from_stored(&req_json)?;
-        let resp: Response = serde_json::from_value(resp_json)
-            .map_err(|e| Error::Memory(format!("decision {id} response: {e}")))?;
+        let Some((req, resp)) = parse_stored(id, &req_json, resp_json) else {
+            continue;
+        };
         if dry_run {
             eprintln!("  {id}: would judge (hung: {})", resp.hung.join(", "));
             continue;
@@ -169,7 +206,11 @@ pub fn demote_judge_entries(store: &Store, ns: Option<&str>, qid: &str) -> usize
         .into_iter()
         .chain(
             store
-                .list(Some(Kind::Precedent), Some(&crate::memory::store::q_scope(ns, qid)), true)
+                .list(
+                    Some(Kind::Precedent),
+                    Some(&crate::memory::store::q_scope(ns, qid)),
+                    true,
+                )
                 .unwrap_or_default(),
         )
     {
@@ -201,9 +242,9 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
         let Some((req_json, resp_json, _)) = store.get_decision(id)? else {
             continue;
         };
-        let req = request_from_stored(&req_json)?;
-        let resp: Response = serde_json::from_value(resp_json)
-            .map_err(|e| Error::Memory(format!("decision {id} response: {e}")))?;
+        let Some((req, resp)) = parse_stored(id, &req_json, resp_json) else {
+            continue;
+        };
         if dry_run {
             eprintln!("  {id}: would re-judge");
             continue;
@@ -250,7 +291,10 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                         .is_some_and(|prev| prev == j.ballot);
                     if confirmed && let Some(q) = req.questions.get(key) {
                         let _ = store.promote_rulings(
-                            &crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()),
+                            &crate::memory::store::q_scope(
+                                ctx.config.namespace.as_deref(),
+                                &q.qid(),
+                            ),
                             Source::Judge.base_trust(),
                         );
                     }
@@ -258,7 +302,11 @@ pub async fn learn_audit(ctx: &DecideCtx, n: usize, recent: bool, dry_run: bool)
                 if keys.is_empty() {
                     eprintln!("  {id}: judge agrees with jury");
                 } else {
-                    eprintln!("  {id}: disagreed on {}, wrote {}", keys.join(","), wrote.len());
+                    eprintln!(
+                        "  {id}: disagreed on {}, wrote {}",
+                        keys.join(","),
+                        wrote.len()
+                    );
                 }
             }
             None => eprintln!("  {id}: judge failed"),
@@ -358,7 +406,8 @@ async fn consolidate_scope(
         prompt,
         system_prompt: Some(
             "You maintain interpretation rules for a decision system. \
-             Output ONLY a single JSON object.".to_string(),
+             Output ONLY a single JSON object."
+                .to_string(),
         ),
         model,
         cwd: ctx.empty_cwd.path().to_path_buf(),
@@ -378,7 +427,10 @@ async fn consolidate_scope(
     let origin = store.machine_id().ok();
     let mut new_ids = Vec::new();
     for r in new_rulings.iter().take(ctx.config.memory.max_rulings) {
-        let Some(text) = r.as_str().map(str::trim).filter(|t| !t.is_empty() && t.len() <= 300)
+        let Some(text) = r
+            .as_str()
+            .map(str::trim)
+            .filter(|t| !t.is_empty() && t.len() <= 300)
         else {
             continue;
         };
@@ -496,8 +548,8 @@ pub fn feedback(
         let Some(q) = req.questions.get(key) else {
             return Err(Error::Request(format!("unknown question key '{key}'")));
         };
-        let val: serde_json::Value = serde_json::from_str(raw)
-            .unwrap_or_else(|_| serde_json::Value::String(raw.clone()));
+        let val: serde_json::Value =
+            serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.clone()));
         let ballot = q.validate_answer(key, &val)?;
 
         // Human contradicts a decided answer → judge lessons on this

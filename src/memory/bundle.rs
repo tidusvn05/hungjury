@@ -128,9 +128,9 @@ pub fn export(
         if e.kind == Kind::Fact
             && let Some(ev) = e.body["evidence"].as_array()
         {
-            return ev.iter().all(|x| {
-                !std::path::Path::new(x["path"].as_str().unwrap_or("")).is_absolute()
-            });
+            return ev
+                .iter()
+                .all(|x| !std::path::Path::new(x["path"].as_str().unwrap_or("")).is_absolute());
         }
         true
     });
@@ -181,9 +181,8 @@ pub fn read_bundle_counting(path: &Path) -> Result<(Manifest, Vec<BundleEntry>, 
     let manifest_line = lines
         .next()
         .ok_or_else(|| Error::Memory(format!("{}: empty bundle", path.display())))?;
-    let manifest: Manifest = serde_json::from_str(manifest_line).map_err(|e| {
-        Error::Memory(format!("{}: bad manifest: {e}", path.display()))
-    })?;
+    let manifest: Manifest = serde_json::from_str(manifest_line)
+        .map_err(|e| Error::Memory(format!("{}: bad manifest: {e}", path.display())))?;
     if manifest.hungjury_bundle != 1 {
         return Err(Error::Memory(format!(
             "{}: not a hungjury bundle",
@@ -225,7 +224,10 @@ pub fn import(
             continue;
         }
         if e.kind == "ruling"
-            && e.body["text"].as_str().map(|t| t.len() > 300).unwrap_or(false)
+            && e.body["text"]
+                .as_str()
+                .map(|t| t.len() > 300)
+                .unwrap_or(false)
         {
             report.rejected += 1;
             continue;

@@ -31,26 +31,24 @@ async fn main() {
     let hung = vec!["ok".to_string()];
 
     let t0 = Instant::now();
-    let results: Vec<_> = stream::iter(
-        cases.iter().enumerate().map(|(i, c)| {
-            let ctx = &ctx;
-            let hung = hung.clone();
-            async move {
-                let (call, usage) = judge::judge_call(
-                    ctx,
-                    c,
-                    "",
-                    &[],
-                    &BTreeMap::new(),
-                    &hung,
-                    &hungjury::util::nonce(),
-                    None,
-                )
-                .await;
-                (i, call.is_some(), usage.ms)
-            }
-        }),
-    )
+    let results: Vec<_> = stream::iter(cases.iter().enumerate().map(|(i, c)| {
+        let ctx = &ctx;
+        let hung = hung.clone();
+        async move {
+            let (call, usage) = judge::judge_call(
+                ctx,
+                c,
+                "",
+                &[],
+                &BTreeMap::new(),
+                &hung,
+                &hungjury::util::nonce(),
+                None,
+            )
+            .await;
+            (i, call.is_some(), usage.ms)
+        }
+    }))
     .buffer_unordered(4)
     .collect()
     .await;

@@ -30,12 +30,10 @@ async fn main() {
     let cases: Vec<Request> = (0..3).map(|_| mk()).collect();
 
     let t0 = Instant::now();
-    let results: Vec<_> = stream::iter(
-        cases.iter().enumerate().map(|(i, c)| {
-            let ctx = &ctx;
-            async move { (i, jury::decide(ctx, c).await) }
-        }),
-    )
+    let results: Vec<_> = stream::iter(cases.iter().enumerate().map(|(i, c)| {
+        let ctx = &ctx;
+        async move { (i, jury::decide(ctx, c).await) }
+    }))
     .buffer_unordered(3)
     .collect()
     .await;

@@ -136,9 +136,9 @@ impl Question {
     /// Explicit `id` if set.
     pub fn id(&self) -> Option<&str> {
         match self {
-            Question::Choice { id, .. } | Question::Score { id, .. } | Question::Noul { id, .. } => {
-                id.as_deref()
-            }
+            Question::Choice { id, .. }
+            | Question::Score { id, .. }
+            | Question::Noul { id, .. } => id.as_deref(),
         }
     }
 
@@ -239,12 +239,14 @@ impl Question {
                 }
                 Ok(Ballot::Score(n))
             }
-            Question::Noul { .. } => v.as_bool().map(Ballot::Noul).ok_or_else(|| {
-                Error::Validation {
-                    agent: key.to_string(),
-                    message: format!("expected boolean, got {v}"),
-                }
-            }),
+            Question::Noul { .. } => {
+                v.as_bool()
+                    .map(Ballot::Noul)
+                    .ok_or_else(|| Error::Validation {
+                        agent: key.to_string(),
+                        message: format!("expected boolean, got {v}"),
+                    })
+            }
         }
     }
 }
@@ -253,10 +255,7 @@ impl Question {
 /// answer schema. With `explain`, a `_why` object of per-key strings is
 /// also required. Strict-mode friendly: `additionalProperties: false`,
 /// every property required.
-pub fn ballot_schema(
-    questions: &BTreeMap<String, Question>,
-    explain: bool,
-) -> serde_json::Value {
+pub fn ballot_schema(questions: &BTreeMap<String, Question>, explain: bool) -> serde_json::Value {
     let mut props = serde_json::Map::new();
     let mut required = Vec::new();
     for (key, q) in questions {
@@ -299,7 +298,10 @@ pub fn validate_ballot(
 ) -> Result<ValidatedBallot> {
     let obj = v.as_object().ok_or_else(|| Error::Validation {
         agent: "juror".to_string(),
-        message: format!("expected a JSON object of answers, got {}", crate::backend::tail(&v.to_string(), 200)),
+        message: format!(
+            "expected a JSON object of answers, got {}",
+            crate::backend::tail(&v.to_string(), 200)
+        ),
     })?;
     let mut ballots = BTreeMap::new();
     let mut missing = Vec::new();
@@ -318,12 +320,13 @@ pub fn validate_ballot(
         });
     }
     let why = if explain {
-        let w = obj.get("_why").and_then(|x| x.as_object()).ok_or_else(|| {
-            Error::Validation {
+        let w = obj
+            .get("_why")
+            .and_then(|x| x.as_object())
+            .ok_or_else(|| Error::Validation {
                 agent: "juror".to_string(),
                 message: "missing `_why` object".to_string(),
-            }
-        })?;
+            })?;
         Some(
             w.iter()
                 .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
@@ -440,19 +443,17 @@ mod tests {
             "u".to_string(),
             serde_json::from_value::<Question>(json!({"type":"noul","instructions":"i"})).unwrap(),
         );
-        let (b, why) = validate_ballot(
-            &qs,
-            &json!({"d": "technical", "f": 1, "u": true}),
-            false,
-        )
-        .unwrap();
+        let (b, why) =
+            validate_ballot(&qs, &json!({"d": "technical", "f": 1, "u": true}), false).unwrap();
         assert_eq!(b["d"], Ballot::Choice("technical".to_string()));
         assert_eq!(b["f"], Ballot::Score(1));
         assert_eq!(b["u"], Ballot::Noul(true));
         assert!(why.is_none());
 
         assert!(validate_ballot(&qs, &json!({"d": "nope", "f": 1, "u": true}), false).is_err());
-        assert!(validate_ballot(&qs, &json!({"d": "technical", "f": 9, "u": true}), false).is_err());
+        assert!(
+            validate_ballot(&qs, &json!({"d": "technical", "f": 9, "u": true}), false).is_err()
+        );
         assert!(validate_ballot(&qs, &json!({"d": "technical", "f": 1}), false).is_err());
         assert!(validate_ballot(&qs, &json!([1, 2]), false).is_err());
     }
@@ -460,14 +461,19 @@ mod tests {
     #[test]
     fn explain_requires_why() {
         let mut qs = BTreeMap::new();
-        qs.insert("u".to_string(), serde_json::from_value::<Question>(
-            json!({"type":"noul","instructions":"i"}),
-        ).unwrap());
+        qs.insert(
+            "u".to_string(),
+            serde_json::from_value::<Question>(json!({"type":"noul","instructions":"i"})).unwrap(),
+        );
         let schema = ballot_schema(&qs, true);
         assert!(schema["properties"]["_why"].is_object());
         assert!(validate_ballot(&qs, &json!({"u": true}), true).is_err());
-        let (_, why) = validate_ballot(&qs, &json!({"u": true, "_why": {"u": "sounds urgent"}}), true)
-            .unwrap();
+        let (_, why) = validate_ballot(
+            &qs,
+            &json!({"u": true, "_why": {"u": "sounds urgent"}}),
+            true,
+        )
+        .unwrap();
         assert_eq!(why.unwrap()["u"], "sounds urgent");
     }
 }

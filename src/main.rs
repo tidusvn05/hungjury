@@ -343,8 +343,7 @@ async fn dispatch(
             let (cfg, ctx) = load_ctx(over, cfg_path)?;
             let _ = cfg;
             let sets = parse_sets(&args.sets)?;
-            let contested =
-                learn::feedback(&ctx, &args.decision_id, &sets, args.note.as_deref())?;
+            let contested = learn::feedback(&ctx, &args.decision_id, &sets, args.note.as_deref())?;
             println!(
                 "{}",
                 serde_json::json!({"ok": true, "decision": args.decision_id, "contested": contested})
@@ -358,7 +357,10 @@ async fn dispatch(
             {
                 match store.expire_rulings(cfg.memory.ruling_ttl_days) {
                     Ok(0) => {}
-                    Ok(n) => eprintln!("learn: {n} rulings expired (ttl {}d)", cfg.memory.ruling_ttl_days),
+                    Ok(n) => eprintln!(
+                        "learn: {n} rulings expired (ttl {}d)",
+                        cfg.memory.ruling_ttl_days
+                    ),
                     Err(e) => eprintln!("learn: ruling expiry failed: {e}"),
                 }
             }
@@ -380,7 +382,21 @@ async fn dispatch(
         }
         Cmd::Eval(args) => {
             let report = args.report.clone().unwrap_or_else(|| match &args.label {
-                Some(l) => PathBuf::from(format!("eval-{l}.json")),
+                // Keep the label filesystem-safe — a label like `a/b`
+                // or `..` must not escape or break the report path.
+                Some(l) => {
+                    let safe: String = l
+                        .chars()
+                        .map(|c| {
+                            if c.is_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                                c
+                            } else {
+                                '-'
+                            }
+                        })
+                        .collect();
+                    PathBuf::from(format!("eval-{}.json", safe.trim_matches('.')))
+                }
                 None => PathBuf::from("report.json"),
             });
             eval::run(
@@ -436,7 +452,8 @@ fn cmd_init(dir: Option<PathBuf>, global: bool) -> hungjury::error::Result<u8> {
 # devin = 0.05
 "#;
     const POLICY_SKEL: &str = "# Decision policy\n\nRules the jury and judge must apply when signals\nconflict — your labelling rubric, in order of precedence.\n\n## <question key>\n\n- <rule>\n";
-    const GITIGNORE: &str = "# hungjury runtime state — never commit\nmemory*.db\ncache/\ncalls.jsonl\nstate.json\n";
+    const GITIGNORE: &str =
+        "# hungjury runtime state — never commit\nmemory*.db\ncache/\ncalls.jsonl\nstate.json\n";
     // Anchored-rubric example: every level names its marker words AND
     // what does not count — the two patterns evaluations showed matter.
     const QUESTIONS_SKEL: &str = r#"{
@@ -463,8 +480,8 @@ fn cmd_init(dir: Option<PathBuf>, global: bool) -> hungjury::error::Result<u8> {
 "#;
 
     if global {
-        let Some(cfg_dir) =
-            directories::ProjectDirs::from("", "", "hungjury").map(|p| p.config_dir().to_path_buf())
+        let Some(cfg_dir) = directories::ProjectDirs::from("", "", "hungjury")
+            .map(|p| p.config_dir().to_path_buf())
         else {
             eprintln!("init: cannot resolve config dir");
             return Ok(1);
@@ -502,7 +519,10 @@ fn cmd_init(dir: Option<PathBuf>, global: bool) -> hungjury::error::Result<u8> {
 }
 
 /// `Config` + `DecideCtx` for commands that need backends/memory.
-fn load_ctx(over: &CliOverrides, cfg_path: Option<&Path>) -> hungjury::error::Result<(Config, DecideCtx)> {
+fn load_ctx(
+    over: &CliOverrides,
+    cfg_path: Option<&Path>,
+) -> hungjury::error::Result<(Config, DecideCtx)> {
     let cfg = Config::load(over, cfg_path)?;
     let ctx = DecideCtx::new(cfg.clone(), None)?;
     Ok((cfg, ctx))
@@ -516,7 +536,10 @@ async fn cmd_decide(
     let req = build_request(&args)?;
     let (_cfg, ctx) = load_ctx(over, cfg_path)?;
     let (resp, code) = jury::decide(&ctx, &req).await?;
-    println!("{}", serde_json::to_string_pretty(&resp).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&resp).unwrap_or_default()
+    );
     Ok(code as u8)
 }
 
@@ -551,9 +574,10 @@ fn build_request(args: &DecideArgs) -> hungjury::error::Result<Request> {
             "provide a request file or --state/--state-file/--workspace".to_string(),
         ));
     };
-    let questions = args.questions.as_deref().ok_or_else(|| {
-        hungjury::error::Error::Request("missing --questions".to_string())
-    })?;
+    let questions = args
+        .questions
+        .as_deref()
+        .ok_or_else(|| hungjury::error::Error::Request("missing --questions".to_string()))?;
     let qjson = match questions.strip_prefix('@') {
         Some(f) => std::fs::read_to_string(f).map_err(|e| hungjury::error::Error::io(f, e))?,
         None => questions.to_string(),
@@ -581,7 +605,11 @@ fn resolve_entry_id(store: &Store, id: &str) -> hungjury::error::Result<Option<S
     store.id_by_prefix(id)
 }
 
-async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>) -> hungjury::error::Result<u8> {
+async fn cmd_memory(
+    cmd: MemoryCmd,
+    over: &CliOverrides,
+    cfg_path: Option<&Path>,
+) -> hungjury::error::Result<u8> {
     let cfg = Config::load(over, cfg_path)?;
     let store = Store::open(&cfg.memory_db)?;
     match cmd {
@@ -590,7 +618,12 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
             let entries = store.search(&q, scope.as_deref())?;
             print_entries(&entries);
         }
-        MemoryCmd::List { kind, scope, all, status } => {
+        MemoryCmd::List {
+            kind,
+            scope,
+            all,
+            status,
+        } => {
             let kind = kind
                 .as_deref()
                 .map(|k| {
@@ -665,7 +698,11 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
             }
             print_entries(&contested);
         }
-        MemoryCmd::Resolve { id, accept, reject: _ } => {
+        MemoryCmd::Resolve {
+            id,
+            accept,
+            reject: _,
+        } => {
             let Some(id) = resolve_entry_id(&store, &id)? else {
                 eprintln!("no entry matching '{id}' (need ≥4 unambiguous chars)");
                 return Ok(1);
@@ -697,37 +734,52 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
             let counts = store.counts()?;
             let stats = store.juror_stats_rows()?;
             let quota = hungjury::quota::Quota::new(&cfg.data_dir, cfg.limits.daily_cap);
-            println!("{}", serde_json::json!({
-                "entries": counts.iter().map(|(k, s, n)| serde_json::json!({
-                    "kind": k, "status": s, "n": n,
-                })).collect::<Vec<_>>(),
-                "by_source": store.source_counts()?.iter().map(|(s, n)| serde_json::json!({
-                    "source": s, "n": n,
-                })).collect::<Vec<_>>(),
-                "namespaces": store.namespaces()?.iter().map(|(s, n)| serde_json::json!({
-                    "namespace": if s.is_empty() { "(default)" } else { s }, "n": n,
-                })).collect::<Vec<_>>(),
-                "decisions": store.decisions_len()?,
-                "queue_pending": store.queue_len()?,
-                "cache_entries": hungjury::cache::Cache::new(
-                    &cfg.data_dir, cfg.no_cache, cfg.refresh,
-                ).len(),
-                "calls_today": quota.today_count().await,
-                "daily_cap": cfg.limits.daily_cap,
-                "juror_stats": stats.iter().map(|(j, q, n, a)| serde_json::json!({
-                    "juror": j, "qid": q, "n": n, "agree": a,
-                })).collect::<Vec<_>>(),
-            }));
+            println!(
+                "{}",
+                serde_json::json!({
+                    "entries": counts.iter().map(|(k, s, n)| serde_json::json!({
+                        "kind": k, "status": s, "n": n,
+                    })).collect::<Vec<_>>(),
+                    "by_source": store.source_counts()?.iter().map(|(s, n)| serde_json::json!({
+                        "source": s, "n": n,
+                    })).collect::<Vec<_>>(),
+                    "namespaces": store.namespaces()?.iter().map(|(s, n)| serde_json::json!({
+                        "namespace": if s.is_empty() { "(default)" } else { s }, "n": n,
+                    })).collect::<Vec<_>>(),
+                    "decisions": store.decisions_len()?,
+                    "queue_pending": store.queue_len()?,
+                    "cache_entries": hungjury::cache::Cache::new(
+                        &cfg.data_dir, cfg.no_cache, cfg.refresh,
+                    ).len(),
+                    "calls_today": quota.today_count().await,
+                    "daily_cap": cfg.limits.daily_cap,
+                    "juror_stats": stats.iter().map(|(j, q, n, a)| serde_json::json!({
+                        "juror": j, "qid": q, "n": n, "agree": a,
+                    })).collect::<Vec<_>>(),
+                })
+            );
         }
-        MemoryCmd::Export { out, scope, include_cases } => {
+        MemoryCmd::Export {
+            out,
+            scope,
+            include_cases,
+        } => {
             let n = memory::bundle::export(&store, &out, scope.as_deref(), include_cases)?;
             println!("{}", serde_json::json!({"exported": n, "out": out}));
         }
-        MemoryCmd::Import { file, trust_factor, dry_run } => {
+        MemoryCmd::Import {
+            file,
+            trust_factor,
+            dry_run,
+        } => {
             let r = memory::bundle::import(&store, &file, trust_factor, dry_run)?;
             println!("{}", import_json(&r, dry_run));
         }
-        MemoryCmd::Merge { files, trust_factor, dry_run } => {
+        MemoryCmd::Merge {
+            files,
+            trust_factor,
+            dry_run,
+        } => {
             let mut total = memory::bundle::ImportReport::default();
             for f in &files {
                 let r = memory::bundle::import(&store, f, trust_factor, dry_run)?;

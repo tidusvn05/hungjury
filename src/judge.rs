@@ -12,9 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::backend::{
-    AgentBackend, AgentRequest, BackendKind, ToolPolicy, extract_json,
-};
+use crate::backend::{AgentBackend, AgentRequest, BackendKind, ToolPolicy, extract_json};
 use crate::error::{Error, Result};
 use crate::jury::DecideCtx;
 use crate::jury::{questions_render, schema_block_text, state_render, workspace_render};
@@ -237,8 +235,7 @@ pub async fn judge_call(
     };
 
     // Verdicts per question.
-    let (ballots, _) =
-        validate_ballot(&req.questions, &v["answers"], false).unwrap_or_default();
+    let (ballots, _) = validate_ballot(&req.questions, &v["answers"], false).unwrap_or_default();
     let rationale = &v["rationale"];
     let mut judged = BTreeMap::new();
     for key in req.questions.keys() {
@@ -341,7 +338,9 @@ pub fn conflict_keys(
         .filter(|k| {
             match (
                 call.judged.get(*k),
-                answers.get(*k).and_then(|a| decided_ballot(a, hung_threshold)),
+                answers
+                    .get(*k)
+                    .and_then(|a| decided_ballot(a, hung_threshold)),
             ) {
                 (Some(j), Some(jury)) => j.ballot != jury,
                 _ => false,
@@ -382,7 +381,9 @@ pub fn commit_judge(
     let judge_json = &call.raw;
     let judged = &call.judged;
     let contested: std::collections::BTreeSet<String> =
-        conflict_keys(req, call, answers, hung_threshold).into_iter().collect();
+        conflict_keys(req, call, answers, hung_threshold)
+            .into_iter()
+            .collect();
 
     // Rulings: question key → qid scope; reject >300 chars / unknown keys.
     if let Some(rs) = judge_json["rulings"].as_array() {

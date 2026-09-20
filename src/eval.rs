@@ -55,16 +55,22 @@ fn load_cases(path: &Path) -> Result<Vec<Case>> {
             .as_object()
             .map(|o| o.iter().map(|(k, x)| (k.clone(), x.clone())).collect())
             .ok_or_else(|| {
-                Error::Request(format!("{} line {}: missing 'expected' object", path.display(), i + 1))
+                Error::Request(format!(
+                    "{} line {}: missing 'expected' object",
+                    path.display(),
+                    i + 1
+                ))
             })?;
         // Shared question set: `questions_file` resolves against the
         // cases file's directory (same contract as `batch`).
         let questions = crate::request::case_questions(&v, path, i + 1)?;
-        let req = Request::from_json(&serde_json::json!({
-            "state": v["state"],
-            "questions": questions,
-        })
-        .to_string())
+        let req = Request::from_json(
+            &serde_json::json!({
+                "state": v["state"],
+                "questions": questions,
+            })
+            .to_string(),
+        )
         .map_err(|e| Error::Request(format!("{} line {}: {e}", path.display(), i + 1)))?;
         cases.push(Case { req, expected });
     }
@@ -76,18 +82,31 @@ fn load_cases(path: &Path) -> Result<Vec<Case>> {
 
 /// Compare a decided answer's top-level verdict to the expected value.
 /// Returns `None` when the question has no committed verdict (hung).
-pub fn answer_matches(a: &crate::response::AnswerOut, expected: &serde_json::Value) -> Option<bool> {
+pub fn answer_matches(
+    a: &crate::response::AnswerOut,
+    expected: &serde_json::Value,
+) -> Option<bool> {
     match a {
-        crate::response::AnswerOut::Choice { choice, confidence, .. } => {
+        crate::response::AnswerOut::Choice {
+            choice, confidence, ..
+        } => {
             (*confidence)?;
             Some(serde_json::Value::String(choice.clone()) == *expected)
         }
-        crate::response::AnswerOut::Score { score, confidence, .. } => {
+        crate::response::AnswerOut::Score {
+            score, confidence, ..
+        } => {
             (*confidence)?;
-            Some(expected.as_f64().is_some_and(|e| (score.round() - e).abs() < 0.5)
-                || expected.as_i64().is_some_and(|e| score.round() as i64 == e))
+            Some(
+                expected
+                    .as_f64()
+                    .is_some_and(|e| (score.round() - e).abs() < 0.5)
+                    || expected.as_i64().is_some_and(|e| score.round() as i64 == e),
+            )
         }
-        crate::response::AnswerOut::Noul { noul, confidence, .. } => {
+        crate::response::AnswerOut::Noul {
+            noul, confidence, ..
+        } => {
             (*confidence)?;
             let verdict = *noul >= 0.5;
             Some(expected.as_bool().is_some_and(|e| e == verdict))
@@ -188,8 +207,7 @@ fn score_response(
     expected: &BTreeMap<String, serde_json::Value>,
 ) {
     stats.walls.push(resp.usage.wall_ms);
-    stats.memory_injected +=
-        resp.memory.rulings + resp.memory.precedents + resp.memory.facts;
+    stats.memory_injected += resp.memory.rulings + resp.memory.precedents + resp.memory.facts;
     if let Some(c) = resp.usage.est_cost_usd {
         *stats.est_cost_usd.get_or_insert(0.0) += c;
     }
@@ -210,7 +228,12 @@ fn score_response(
                 stats.correct += 1;
                 k[1] += 1;
             } else {
-                note_mismatch(stats, case, key, want, answerout_json(&resp.answers[key]));
+                let got = resp
+                    .answers
+                    .get(key)
+                    .map(answerout_json)
+                    .unwrap_or(serde_json::json!("missing"));
+                note_mismatch(stats, case, key, want, got);
             }
             continue;
         }
@@ -240,6 +263,20 @@ fn score_judge(
 ) {
     for (key, want) in expected {
         let k = stats.per_key.entry(key.clone()).or_default();
+        // Same `"hung"` semantics as score_response: abstaining (no
+        // judged entry) is the correct outcome, not an uncounted hung.
+        if want.as_str() == Some("hung") {
+            stats.decided += 1;
+            k[0] += 1;
+            match call.judged.get(key) {
+                None => {
+                    stats.correct += 1;
+                    k[1] += 1;
+                }
+                Some(j) => note_mismatch(stats, case, key, want, j.ballot.to_json()),
+            }
+            continue;
+        }
         match call.judged.get(key) {
             Some(j) => {
                 stats.decided += 1;
@@ -279,24 +316,45 @@ pub async fn run(
 ) -> Result<()> {
     let cases = load_cases(cases_path)?;
     let mut reports = Vec::new();
+    let mut seed_errors = Vec::new();
     for s in seed..seed + seeds.max(1) {
-        let tmp = std::env::temp_dir().join(format!(
-            "hungjury-eval-{}-{s}.db",
-            crate::util::nonce()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("hungjury-eval-{}-{s}.db", crate::util::nonce()));
         let mut over = base.clone();
         over.memory_db = Some(tmp.clone());
-        let rep = run_seed(&cases, train_frac, &over, config_path, s, label, audit_train).await;
+        let rep = run_seed(
+            &cases,
+            train_frac,
+            &over,
+            config_path,
+            s,
+            label,
+            audit_train,
+        )
+        .await;
         for suffix in ["", "-wal", "-shm", "-journal"] {
             let _ = std::fs::remove_file(format!("{}{suffix}", tmp.display()));
         }
-        reports.push((s, rep?));
+        match rep {
+            Ok(r) => reports.push((s, r)),
+            // A failed seed must not discard the seeds that did run.
+            Err(e) => {
+                eprintln!("eval: seed {s} failed: {e}");
+                seed_errors.push(serde_json::json!({"seed": s, "error": e.to_string()}));
+            }
+        }
+    }
+    if reports.is_empty() {
+        return Err(Error::Memory(format!(
+            "all {} seed(s) failed",
+            seeds.max(1)
+        )));
     }
 
-    let body = if reports.len() == 1 {
+    let body = if reports.len() == 1 && seed_errors.is_empty() {
         serde_json::to_string_pretty(&reports[0].1)
     } else {
-        serde_json::to_string_pretty(&aggregate_report(label, &reports))
+        serde_json::to_string_pretty(&aggregate_report(label, &reports, &seed_errors))
     }
     .map_err(|e| Error::Memory(e.to_string()))?;
     crate::util::write_atomic(report_path, body.as_bytes())?;
@@ -305,8 +363,13 @@ pub async fn run(
     Ok(())
 }
 
-/// Mean/min/max across seeds, per arm + go verdicts.
-fn aggregate_report(label: Option<&str>, reports: &[(u64, serde_json::Value)]) -> serde_json::Value {
+/// Mean/min/max across seeds, per arm + go verdicts. `seed_errors`
+/// records seeds that failed so the aggregate isn't silently partial.
+fn aggregate_report(
+    label: Option<&str>,
+    reports: &[(u64, serde_json::Value)],
+    seed_errors: &[serde_json::Value],
+) -> serde_json::Value {
     let arms = ["jury", "jury_memory", "judge", "judge_informed"];
     let mut agg_arms = serde_json::Map::new();
     for arm in arms {
@@ -334,7 +397,10 @@ fn aggregate_report(label: Option<&str>, reports: &[(u64, serde_json::Value)]) -
                     .iter()
                     .filter_map(|(_, r)| r["arms"][arm]["per_key"][&k]["accuracy"].as_f64())
                     .collect();
-                (k, serde_json::json!(v.iter().sum::<f64>() / v.len().max(1) as f64))
+                (
+                    k,
+                    serde_json::json!(v.iter().sum::<f64>() / v.len().max(1) as f64),
+                )
             })
             .collect();
         agg_arms.insert(
@@ -365,6 +431,7 @@ fn aggregate_report(label: Option<&str>, reports: &[(u64, serde_json::Value)]) -
             "go_pass": format!("{passes}/{}", reports.len()),
         },
         "runs": reports.iter().map(|(s, r)| serde_json::json!({"seed": s, "report": r})).collect::<Vec<_>>(),
+        "seed_errors": seed_errors,
     })
 }
 
@@ -383,7 +450,12 @@ async fn run_seed(
     let n = cases.len();
     let n_train = ((n as f64) * train_frac.clamp(0.0, 1.0)).round() as usize;
     let (train, test) = cases.split_at(n_train.min(n.saturating_sub(1)));
-    eprintln!("eval: seed {seed} — {} cases — {} train, {} test", n, train.len(), test.len());
+    eprintln!(
+        "eval: seed {seed} — {} cases — {} train, {} test",
+        n,
+        train.len(),
+        test.len()
+    );
 
     // Pass 1: train — `decide --escalate sync` populates memory.
     {
@@ -394,15 +466,10 @@ async fn run_seed(
         over.no_cache = true;
         let ctx = ctx_for(&over, config_path)?;
         let par = ctx.config.limits.max_concurrency.max(1);
-        let results: Vec<_> = stream::iter(
-            train
-                .iter()
-                .enumerate()
-                .map(|(i, c)| {
-                    let ctx = &ctx;
-                    async move { (i, jury::decide(ctx, &c.req).await) }
-                }),
-        )
+        let results: Vec<_> = stream::iter(train.iter().enumerate().map(|(i, c)| {
+            let ctx = &ctx;
+            async move { (i, jury::decide(ctx, &c.req).await) }
+        }))
         .buffer_unordered(par)
         .collect()
         .await;
@@ -430,12 +497,10 @@ async fn run_seed(
         over.no_cache = true;
         let ctx = ctx_for(&over, config_path)?;
         let par = ctx.config.limits.max_concurrency.max(1);
-        let results: Vec<_> = stream::iter(
-            test.iter().enumerate().map(|(i, c)| {
-                let ctx = &ctx;
-                async move { (i, jury::decide(ctx, &c.req).await) }
-            }),
-        )
+        let results: Vec<_> = stream::iter(test.iter().enumerate().map(|(i, c)| {
+            let ctx = &ctx;
+            async move { (i, jury::decide(ctx, &c.req).await) }
+        }))
         .buffer_unordered(par)
         .collect()
         .await;
@@ -460,12 +525,10 @@ async fn run_seed(
         over.no_cache = true;
         let ctx = ctx_for(&over, config_path)?;
         let par = ctx.config.limits.max_concurrency.max(1);
-        let results: Vec<_> = stream::iter(
-            test.iter().enumerate().map(|(i, c)| {
-                let ctx = &ctx;
-                async move { (i, jury::decide(ctx, &c.req).await) }
-            }),
-        )
+        let results: Vec<_> = stream::iter(test.iter().enumerate().map(|(i, c)| {
+            let ctx = &ctx;
+            async move { (i, jury::decide(ctx, &c.req).await) }
+        }))
         .buffer_unordered(par)
         .collect()
         .await;
@@ -486,38 +549,40 @@ async fn run_seed(
         over.no_cache = true;
         let ctx = ctx_for(&over, config_path)?;
         let par = ctx.config.limits.max_concurrency.max(1);
-        let results: Vec<_> = stream::iter(
-            test.iter().enumerate().map(|(i, c)| {
-                let ctx = &ctx;
-                async move {
-                    let hung: Vec<String> = c.req.questions.keys().cloned().collect();
-                    let memory_block = match &ctx.store {
-                        Some(s) => {
-                            crate::memory::retrieve::retrieve(s, &c.req, &ctx.config.memory, ctx.config.namespace.as_deref(), None)
-                                .map(|r| r.block)
-                                .unwrap_or_default()
-                        }
-                        None => String::new(),
-                    };
-                    let ws_path = match &c.req.state {
-                        crate::request::State::Workspace { path, .. } => Some(path.as_path()),
-                        _ => None,
-                    };
-                    let (call, usage) = judge::judge_call(
-                        ctx,
+        let results: Vec<_> = stream::iter(test.iter().enumerate().map(|(i, c)| {
+            let ctx = &ctx;
+            async move {
+                let hung: Vec<String> = c.req.questions.keys().cloned().collect();
+                let memory_block = match &ctx.store {
+                    Some(s) => crate::memory::retrieve::retrieve(
+                        s,
                         &c.req,
-                        &memory_block,
-                        &[],
-                        &BTreeMap::new(),
-                        &hung,
-                        &crate::util::nonce(),
-                        ws_path,
+                        &ctx.config.memory,
+                        ctx.config.namespace.as_deref(),
+                        None,
                     )
-                    .await;
-                    (i, call, usage)
-                }
-            }),
-        )
+                    .map(|r| r.block)
+                    .unwrap_or_default(),
+                    None => String::new(),
+                };
+                let ws_path = match &c.req.state {
+                    crate::request::State::Workspace { path, .. } => Some(path.as_path()),
+                    _ => None,
+                };
+                let (call, usage) = judge::judge_call(
+                    ctx,
+                    &c.req,
+                    &memory_block,
+                    &[],
+                    &BTreeMap::new(),
+                    &hung,
+                    &crate::util::nonce(),
+                    ws_path,
+                )
+                .await;
+                (i, call, usage)
+            }
+        }))
         .buffer_unordered(par)
         .collect::<Vec<_>>()
         .await;
@@ -555,7 +620,7 @@ async fn run_seed(
                     let ctx = &ctx;
                     async move {
                         let hung: Vec<String> = c.req.questions.keys().cloned().collect();
-                        let memory_block = match &ctx.store {
+                        let (memory_block, injected) = match &ctx.store {
                             Some(s) => crate::memory::retrieve::retrieve(
                                 s,
                                 &c.req,
@@ -563,9 +628,12 @@ async fn run_seed(
                                 ctx.config.namespace.as_deref(),
                                 None,
                             )
-                            .map(|r| r.block)
+                            .map(|r| {
+                                let n = r.used.rulings + r.used.precedents + r.used.facts;
+                                (r.block, n)
+                            })
                             .unwrap_or_default(),
-                            None => String::new(),
+                            None => Default::default(),
                         };
                         let juror_ballots: Vec<(String, BTreeMap<String, Ballot>)> = resp
                             .usage
@@ -604,15 +672,16 @@ async fn run_seed(
                             ws_path,
                         )
                         .await;
-                        (i, call, usage)
+                        (i, call, usage, injected)
                     }
                 }),
         )
         .buffer_unordered(par)
         .collect::<Vec<_>>()
         .await;
-        for (i, call, usage) in results {
+        for (i, call, usage, injected) in results {
             note_calls(&mut informed_stats, &usage.model, 1);
+            informed_stats.memory_injected += injected;
             informed_stats.walls.push(usage.ms);
             match call {
                 Some(call) => score_judge(&mut informed_stats, i, &call, &test[i].expected),
@@ -630,7 +699,11 @@ async fn run_seed(
     // by closing ≥50% of that gap. When it isn't (jury ≥ judge — small
     // or easy sets can put the jury on top), the meaningful bar is
     // that memory doesn't drag the jury below its no-memory accuracy.
-    let (ja, ma, ga) = (jury_stats.accuracy(), mem_stats.accuracy(), judge_stats.accuracy());
+    let (ja, ma, ga) = (
+        jury_stats.accuracy(),
+        mem_stats.accuracy(),
+        judge_stats.accuracy(),
+    );
     let gap = ga - ja;
     let mem_delta = ma - ja;
     let closed = if gap > 0.0 { mem_delta / gap } else { 0.0 };
@@ -771,7 +844,7 @@ mod tests {
 
     #[test]
     fn arm_json_reports_calls_and_latency() {
-        use crate::response::{DecidedBy, JurorUsage, JudgeUsage, MemoryUse, Response, Usage};
+        use crate::response::{DecidedBy, JudgeUsage, JurorUsage, MemoryUse, Response, Usage};
         let resp = Response {
             id: "dec_x".into(),
             decided_by: DecidedBy::Jury,
@@ -834,6 +907,92 @@ mod tests {
         assert_eq!(j["wall_ms_mean"], json!(100.0));
         assert_eq!(j["wall_ms_p95"], json!(100));
         assert_eq!(j["accuracy"], json!(1.0));
+    }
+
+    #[test]
+    fn score_judge_hung_expectation_matches_jury_semantics() {
+        use crate::judge::{JudgeCall, JudgeOut};
+        use crate::question::Ballot;
+        use crate::response::JudgeVerdict;
+        // Judge abstained on `a` (not judged), decided `b` wrongly, and
+        // decided `c` correctly. `a` expects "hung" — abstention must
+        // count decided+correct exactly like score_response.
+        let call = JudgeCall {
+            judged: BTreeMap::from([
+                (
+                    "b".into(),
+                    JudgeOut {
+                        ballot: Ballot::Noul(true),
+                        verdict: JudgeVerdict {
+                            choice: None,
+                            score: None,
+                            noul: Some(true),
+                            rationale: None,
+                        },
+                    },
+                ),
+                (
+                    "c".into(),
+                    JudgeOut {
+                        ballot: Ballot::Choice("x".into()),
+                        verdict: JudgeVerdict {
+                            choice: Some("x".into()),
+                            score: None,
+                            noul: None,
+                            rationale: None,
+                        },
+                    },
+                ),
+            ]),
+            raw: json!({}),
+        };
+        let expected = BTreeMap::from([
+            ("a".into(), json!("hung")),
+            ("b".into(), json!(false)),
+            ("c".into(), json!("x")),
+        ]);
+        let mut stats = ArmStats::default();
+        score_judge(&mut stats, 0, &call, &expected);
+        assert_eq!(stats.decided, 3);
+        assert_eq!(stats.correct, 2);
+        assert_eq!(stats.hung, 0);
+        assert_eq!(stats.mismatches.len(), 1);
+        assert_eq!(stats.per_key["a"], [1, 1]);
+    }
+
+    #[test]
+    fn score_response_hung_expectation() {
+        use crate::response::{DecidedBy, MemoryUse, Response, Usage};
+        let resp = Response {
+            id: "dec_x".into(),
+            decided_by: DecidedBy::Jury,
+            answers: BTreeMap::new(),
+            hung: vec!["a".into()],
+            escalated: vec![],
+            sources: BTreeMap::new(),
+            memory: MemoryUse::default(),
+            usage: Usage {
+                wall_ms: 0,
+                jurors: vec![],
+                judge: None,
+                est_cost_usd: None,
+            },
+        };
+        let mut stats = ArmStats::default();
+        let expected = BTreeMap::from([("a".into(), json!("hung"))]);
+        score_response(&mut stats, 0, &resp, &expected);
+        assert_eq!(stats.decided, 1);
+        assert_eq!(stats.correct, 1);
+        // A key expected to hang that instead carries no answer at all
+        // must not panic.
+        let mut stats2 = ArmStats::default();
+        let resp2 = Response {
+            hung: vec![],
+            ..resp
+        };
+        score_response(&mut stats2, 0, &resp2, &expected);
+        assert_eq!(stats2.correct, 0);
+        assert_eq!(stats2.mismatches[0]["got"], json!("missing"));
     }
 
     #[test]

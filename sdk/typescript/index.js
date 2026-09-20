@@ -71,13 +71,25 @@ function decide(state, questions, opts = {}) {
   });
   if (proc.error) throw new HungjuryError(String(proc.error), -1);
   // Exit 2 is a valid hung response — stdout still carries the JSON.
-  if (proc.status === 1 || !proc.stdout.trim()) {
+  // Any other nonzero exit (crash, signal, unknown code) is an error.
+  if (
+    proc.status !== 0 &&
+    proc.status !== 2
+  ) {
     throw new HungjuryError(
       (proc.stderr || "").trim() || `exit ${proc.status}`,
       proc.status ?? -1,
     );
   }
-  const raw = JSON.parse(proc.stdout);
+  let raw;
+  try {
+    raw = JSON.parse(proc.stdout);
+  } catch {
+    throw new HungjuryError(
+      `invalid JSON on stdout (exit ${proc.status}): ${proc.stdout.slice(0, 200)}`,
+      proc.status ?? -1,
+    );
+  }
   const exitCode = proc.status ?? 0;
   return {
     id: raw.id,

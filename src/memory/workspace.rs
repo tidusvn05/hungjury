@@ -97,8 +97,7 @@ pub fn verify_facts(
                 ev.iter().all(|e| {
                     let path = e["path"].as_str().unwrap_or("");
                     let want = e["sha256"].as_str().unwrap_or("");
-                    !path.is_empty()
-                        && file_sha256(&ws.join(path)).as_deref() == Some(want)
+                    !path.is_empty() && file_sha256(&ws.join(path)).as_deref() == Some(want)
                 })
             })
             // Facts without evidence can't drift.
@@ -119,9 +118,8 @@ pub fn evidence_for(ws: &Path, paths: &[PathBuf]) -> Vec<serde_json::Value> {
         .iter()
         .filter_map(|p| {
             let rel = p.strip_prefix(ws).ok().unwrap_or(p);
-            file_sha256(p).map(|h| {
-                serde_json::json!({"path": rel.display().to_string(), "sha256": h})
-            })
+            file_sha256(p)
+                .map(|h| serde_json::json!({"path": rel.display().to_string(), "sha256": h}))
         })
         .collect()
 }

@@ -11,9 +11,7 @@ use std::time::Instant;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use tokio::sync::Semaphore;
 
-use crate::backend::{
-    AgentBackend, AgentRequest, BackendKind, ToolPolicy, for_kind,
-};
+use crate::backend::{AgentBackend, AgentRequest, BackendKind, ToolPolicy, for_kind};
 use crate::cache::Cache;
 use crate::config::{Config, Escalate};
 use crate::error::{Error, Result};
@@ -25,9 +23,7 @@ use crate::prompt::PromptLoader;
 use crate::question::{Ballot, ballot_schema};
 use crate::quota::Quota;
 use crate::request::{Request, State};
-use crate::response::{
-    AnswerOut, DecidedBy, JudgeUsage, JurorUsage, Response, Usage,
-};
+use crate::response::{AnswerOut, DecidedBy, JudgeUsage, JurorUsage, Response, Usage};
 
 /// Everything `decide` needs, built once per invocation.
 pub struct DecideCtx {
@@ -53,7 +49,10 @@ pub struct DecideCtx {
 
 impl DecideCtx {
     /// Build from config; `backends` may inject mocks.
-    pub fn new(config: Config, backends: Option<HashMap<BackendKind, Arc<dyn AgentBackend>>>) -> Result<Self> {
+    pub fn new(
+        config: Config,
+        backends: Option<HashMap<BackendKind, Arc<dyn AgentBackend>>>,
+    ) -> Result<Self> {
         let store = if config.memory.enabled || config.memory.readonly {
             match Store::open(&config.memory_db) {
                 Ok(s) => Some(s),
@@ -105,7 +104,10 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         .map(|q| crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()))
         .collect();
     if let Some(r) = &repo_id {
-        scopes.push(crate::memory::store::ws_scope(ctx.config.namespace.as_deref(), r));
+        scopes.push(crate::memory::store::ws_scope(
+            ctx.config.namespace.as_deref(),
+            r,
+        ));
     }
 
     // 0. Exact-match cache.
@@ -116,9 +118,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         }
         None => String::new(),
     };
-    let ws_stamp = ws_path
-        .as_deref()
-        .and_then(workspace::workspace_stamp);
+    let ws_stamp = ws_path.as_deref().and_then(workspace::workspace_stamp);
     if workspace_mode && ws_stamp.is_none() {
         tracing::info!("non-git workspace: decision will not be cached");
     }
@@ -148,14 +148,15 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     );
     if (ws_stamp.is_some() || !workspace_mode)
         && let Some(hit) = ctx.cache.get(&cache_key)
-            && let Ok(mut resp) =
-                serde_json::from_value::<Response>(hit.response.clone())
-        {
-            resp.decided_by = DecidedBy::Cache;
-            resp.sources.values_mut().for_each(|s| *s = DecidedBy::Cache);
-            let code = resp.exit_code();
-            return Ok((resp, code));
-        }
+        && let Ok(mut resp) = serde_json::from_value::<Response>(hit.response.clone())
+    {
+        resp.decided_by = DecidedBy::Cache;
+        resp.sources
+            .values_mut()
+            .for_each(|s| *s = DecidedBy::Cache);
+        let code = resp.exit_code();
+        return Ok((resp, code));
+    }
 
     // 1. Retrieve memory (in-process, before any spawn).
     let retrieval = retrieve_memory(ctx, req, repo_id.as_deref(), ws_path.as_deref())?;
@@ -166,7 +167,14 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     let prompt_with_mem =
         render_juror_prompt(ctx, req, &retrieval.block, &schema, &tag, &juror_tmpl)?;
     let prompt_blind = if ctx.config.memory.blind_juror {
-        Some(render_juror_prompt(ctx, req, "", &schema, &tag, &juror_tmpl)?)
+        Some(render_juror_prompt(
+            ctx,
+            req,
+            "",
+            &schema,
+            &tag,
+            &juror_tmpl,
+        )?)
     } else {
         None
     };
@@ -251,9 +259,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         // Below quorum (too few valid ballots — e.g. jurors timed out) the
         // question is hung even though `confidence` is `None`: a lone
         // surviving juror must not silently decide.
-        if votes.len() < ctx.config.min_quorum
-            || vote::is_hung(&out, ctx.config.hung_threshold)
-        {
+        if votes.len() < ctx.config.min_quorum || vote::is_hung(&out, ctx.config.hung_threshold) {
             hung.push(key.clone());
         }
         answers.insert(key.clone(), out);
@@ -262,11 +268,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     // 5. Escalation.
     let juror_ballots: Vec<(String, BTreeMap<String, Ballot>)> = runs
         .iter()
-        .filter_map(|r| {
-            r.ballots
-                .as_ref()
-                .map(|b| (r.juror.clone(), b.clone()))
-        })
+        .filter_map(|r| r.ballots.as_ref().map(|b| (r.juror.clone(), b.clone())))
         .collect();
     let mut decided_by = DecidedBy::Jury;
     let mut judge_usage: Option<JudgeUsage> = None;
@@ -374,20 +376,17 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         }
     }
     if (ws_stamp.is_some() || !workspace_mode)
-        && let Ok(v) = serde_json::to_value(&response) {
-            let _ = ctx.cache.put(&cache_key, &v);
-        }
+        && let Ok(v) = serde_json::to_value(&response)
+    {
+        let _ = ctx.cache.put(&cache_key, &v);
+    }
     let code = response.exit_code();
     Ok((response, code))
 }
 
 /// Estimated USD cost of this decision from `[costs]` — `None` unless at
 /// least one backend has a configured price.
-fn est_cost(
-    ctx: &DecideCtx,
-    runs: &[juror::JurorRun],
-    judge: Option<&JudgeUsage>,
-) -> Option<f64> {
+fn est_cost(ctx: &DecideCtx, runs: &[juror::JurorRun], judge: Option<&JudgeUsage>) -> Option<f64> {
     if ctx.config.costs.is_empty() {
         return None;
     }
@@ -448,12 +447,21 @@ fn retrieve_memory(
         return Ok(empty);
     };
     let facts = match (repo_id, ws_path) {
-        (Some(r), Some(p)) => {
-                Some(workspace::verify_facts(store, p, ctx.config.namespace.as_deref(), r)?)
-            }
+        (Some(r), Some(p)) => Some(workspace::verify_facts(
+            store,
+            p,
+            ctx.config.namespace.as_deref(),
+            r,
+        )?),
         _ => None,
     };
-    retrieve::retrieve(store, req, &ctx.config.memory, ctx.config.namespace.as_deref(), facts)
+    retrieve::retrieve(
+        store,
+        req,
+        &ctx.config.memory,
+        ctx.config.namespace.as_deref(),
+        facts,
+    )
 }
 
 /// The short system prompt — full contract lives in the user message.
@@ -473,9 +481,7 @@ pub fn policy_block(ctx: &DecideCtx) -> String {
         .policy
         .as_deref()
         .map(|p| {
-            format!(
-                "## Domain policy\n\n{p}\n\nApply these rules over your own defaults.\n\n"
-            )
+            format!("## Domain policy\n\n{p}\n\nApply these rules over your own defaults.\n\n")
         })
         .unwrap_or_default()
 }
@@ -560,11 +566,10 @@ fn juror_usage(r: &juror::JurorRun) -> JurorUsage {
         status: r.status.to_string(),
         ms: r.ms,
         retries: r.retries,
-        answers: r.ballots.as_ref().map(|b| {
-            b.iter()
-                .map(|(k, v)| (k.clone(), v.to_json()))
-                .collect()
-        }),
+        answers: r
+            .ballots
+            .as_ref()
+            .map(|b| b.iter().map(|(k, v)| (k.clone(), v.to_json())).collect()),
         error: r.error.clone(),
         input_tokens: r.usage.as_ref().map(|u| u.input),
         output_tokens: r.usage.as_ref().map(|u| u.output),

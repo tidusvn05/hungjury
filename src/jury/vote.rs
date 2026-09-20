@@ -28,10 +28,8 @@ pub fn tally(q: &Question, votes: &Votes) -> AnswerOut {
     let n = votes.len();
     match q {
         Question::Choice { criteria, .. } => {
-            let mut probs: BTreeMap<String, f64> = criteria
-                .keys()
-                .map(|k| (k.clone(), 0.0))
-                .collect();
+            let mut probs: BTreeMap<String, f64> =
+                criteria.keys().map(|k| (k.clone(), 0.0)).collect();
             for (w, b) in votes {
                 if let Ballot::Choice(c) = b
                     && let Some(p) = probs.get_mut(c)
@@ -229,8 +227,17 @@ mod tests {
 
     #[test]
     fn choice_unanimous() {
-        let a = tally(&choice_q(), &[cb("technical"), cb("technical"), cb("technical")]);
-        let AnswerOut::Choice { choice, probabilities, confidence, .. } = &a else {
+        let a = tally(
+            &choice_q(),
+            &[cb("technical"), cb("technical"), cb("technical")],
+        );
+        let AnswerOut::Choice {
+            choice,
+            probabilities,
+            confidence,
+            ..
+        } = &a
+        else {
             panic!()
         };
         assert_eq!(choice.as_str(), "technical");
@@ -242,8 +249,16 @@ mod tests {
 
     #[test]
     fn choice_2_1_hangs() {
-        let a = tally(&choice_q(), &[cb("technical"), cb("technical"), cb("billing")]);
-        let AnswerOut::Choice { choice, confidence, .. } = &a else { panic!() };
+        let a = tally(
+            &choice_q(),
+            &[cb("technical"), cb("technical"), cb("billing")],
+        );
+        let AnswerOut::Choice {
+            choice, confidence, ..
+        } = &a
+        else {
+            panic!()
+        };
         assert_eq!(choice.as_str(), "technical");
         // 0.67 − 0.33 ≈ 0.33 < 0.5 → hung.
         assert!((confidence.unwrap() - 1.0 / 3.0).abs() < 1e-6);
@@ -272,7 +287,12 @@ mod tests {
         // "billing" declared before "technical": a 1–1–0 tie picks billing,
         // confidence 0 → always hung.
         let a = tally(&choice_q(), &[cb("technical"), cb("billing")]);
-        let AnswerOut::Choice { choice, confidence, .. } = &a else { panic!() };
+        let AnswerOut::Choice {
+            choice, confidence, ..
+        } = &a
+        else {
+            panic!()
+        };
         assert_eq!(choice.as_str(), "billing");
         assert_eq!(*confidence, Some(0.0));
         assert!(is_hung(&a, 0.5));
@@ -282,9 +302,19 @@ mod tests {
     fn choice_weights_shift_winner() {
         let a = tally(
             &choice_q(),
-            &[(0.9, Ballot::Choice("billing".into())), (0.1, Ballot::Choice("technical".into()))],
+            &[
+                (0.9, Ballot::Choice("billing".into())),
+                (0.1, Ballot::Choice("technical".into())),
+            ],
         );
-        let AnswerOut::Choice { choice, probabilities, .. } = a else { panic!() };
+        let AnswerOut::Choice {
+            choice,
+            probabilities,
+            ..
+        } = a
+        else {
+            panic!()
+        };
         assert_eq!(choice, "billing");
         assert!((probabilities["billing"] - 0.9).abs() < 1e-9);
     }
@@ -298,7 +328,15 @@ mod tests {
             (1.0, Ballot::Score(1)),
         ];
         let a = tally(&q, &votes);
-        let AnswerOut::Score { score, legend, confidence, .. } = a else { panic!() };
+        let AnswerOut::Score {
+            score,
+            legend,
+            confidence,
+            ..
+        } = a
+        else {
+            panic!()
+        };
         assert!((score - 4.0 / 3.0).abs() < 1e-9);
         assert_eq!(legend, "lv1");
         // stddev = sqrt(((1-1.33)²·2 + (2-1.33)²)/3) ≈ 0.471; max = 1 → conf ≈ 0.53.
@@ -307,7 +345,10 @@ mod tests {
 
     #[test]
     fn score_unanimous_confidence_one() {
-        let a = tally(&score_q(3), &[(1.0, Ballot::Score(2)), (1.0, Ballot::Score(2))]);
+        let a = tally(
+            &score_q(3),
+            &[(1.0, Ballot::Score(2)), (1.0, Ballot::Score(2))],
+        );
         assert_eq!(a.confidence(), Some(1.0));
     }
 
@@ -345,7 +386,12 @@ mod tests {
             (1.0, Ballot::Noul(false)),
         ];
         let a = tally(&noul_q(), &votes);
-        let AnswerOut::Noul { noul, confidence, .. } = a else { panic!() };
+        let AnswerOut::Noul {
+            noul, confidence, ..
+        } = a
+        else {
+            panic!()
+        };
         assert!((noul - 2.0 / 3.0).abs() < 1e-9);
         assert!((confidence.unwrap() - 1.0 / 3.0).abs() < 1e-6);
         assert!(is_hung(&a, 0.5));
@@ -366,7 +412,9 @@ mod tests {
         let a = tally(&choice_q(), &[]);
         assert_eq!(a.confidence(), None);
         assert!(!is_hung(&a, 0.5));
-        let AnswerOut::Choice { choice, .. } = a else { panic!() };
+        let AnswerOut::Choice { choice, .. } = a else {
+            panic!()
+        };
         assert_eq!(choice, "billing"); // declaration-order fallback
     }
 }
