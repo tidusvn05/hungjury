@@ -1,0 +1,407 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.8444444444444444,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 30
+      },
+      "correct": 76,
+      "decided": 90,
+      "est_cost_usd": 0.0,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 10,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 18,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 17,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 20,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 15206.4,
+      "wall_ms_p95": 26484
+    },
+    "judge_informed": {
+      "accuracy": 0.8666666666666667,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 30
+      },
+      "correct": 78,
+      "decided": 90,
+      "est_cost_usd": 0.0,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 17,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 20,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 18,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 28,
+          "expected": 0,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 16646.166666666668,
+      "wall_ms_p95": 23131
+    },
+    "jury": {
+      "accuracy": 0.8555555555555555,
+      "calls": 90,
+      "calls_by_backend": {
+        "claude": 30,
+        "codex": 30,
+        "devin": 30
+      },
+      "correct": 77,
+      "decided": 90,
+      "est_cost_usd": 0.0,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 1,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 17,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 24,
+          "expected": 0,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 20179.333333333332,
+      "wall_ms_p95": 33704
+    },
+    "jury_memory": {
+      "accuracy": 0.8555555555555555,
+      "calls": 90,
+      "calls_by_backend": {
+        "claude": 30,
+        "codex": 30,
+        "devin": 30
+      },
+      "correct": 77,
+      "decided": 90,
+      "est_cost_usd": 0.0,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 1,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 8,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 13,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 14,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 17,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 20,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 24,
+          "expected": 0,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 25,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "frustration"
+        },
+        {
+          "case": 26,
+          "expected": true,
+          "got": false,
+          "key": "is_urgent"
+        },
+        {
+          "case": 29,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 18905.966666666667,
+      "wall_ms_p95": 26851
+    }
+  },
+  "cases": 60,
+  "config": {
+    "escalate": "Sync",
+    "hung_threshold": 0.5,
+    "judge": "claude:opus@high",
+    "jurors": [
+      "claude:haiku",
+      "codex:gpt-5.6-terra@low",
+      "devin:swe-2-medium"
+    ],
+    "min_quorum": 2,
+    "samples": 1
+  },
+  "go": {
+    "accuracy_gap_jury_to_judge": -0.011111111111111072,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "pass": false
+  },
+  "label": "adversarial-policy",
+  "seed": 7,
+  "test": 30,
+  "train": 30
+}
