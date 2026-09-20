@@ -5,3 +5,7 @@ escalate = "queue"          # hung tickets land in the human/judge queue
 hung_threshold = 0.5
 min_quorum = 2
 # policy.md in this dir is auto-detected and injected into prompts.
+
+[limits]
+# Raised for multi-seed eval runs (~1.1k calls across 3 seeds).
+daily_cap = 5000

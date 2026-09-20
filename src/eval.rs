@@ -319,6 +319,24 @@ fn aggregate_report(label: Option<&str>, reports: &[(u64, serde_json::Value)]) -
             .filter_map(|(_, r)| r["arms"][arm]["memory_injected"].as_f64())
             .collect();
         let mean = accs.iter().sum::<f64>() / accs.len().max(1) as f64;
+        // Per-key accuracy means: collect the union of keys seen in any
+        // seed's per_key block, then average each across seeds.
+        let mut key_names: std::collections::BTreeSet<String> = Default::default();
+        for (_, r) in reports {
+            if let Some(pk) = r["arms"][arm]["per_key"].as_object() {
+                key_names.extend(pk.keys().cloned());
+            }
+        }
+        let per_key: serde_json::Map<String, serde_json::Value> = key_names
+            .into_iter()
+            .map(|k| {
+                let v: Vec<f64> = reports
+                    .iter()
+                    .filter_map(|(_, r)| r["arms"][arm]["per_key"][&k]["accuracy"].as_f64())
+                    .collect();
+                (k, serde_json::json!(v.iter().sum::<f64>() / v.len().max(1) as f64))
+            })
+            .collect();
         agg_arms.insert(
             arm.to_string(),
             serde_json::json!({
@@ -326,6 +344,7 @@ fn aggregate_report(label: Option<&str>, reports: &[(u64, serde_json::Value)]) -
                 "accuracy_min": accs.iter().cloned().fold(f64::INFINITY, f64::min),
                 "accuracy_max": accs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
                 "memory_injected_mean": injects.iter().sum::<f64>() / injects.len().max(1) as f64,
+                "per_key_mean": per_key,
             }),
         );
     }

@@ -633,6 +633,14 @@ impl Store {
     /// Raise judge-sourced rulings on `scope` up to `trust`. Only
     /// judge-written entries below the target are touched — human or
     /// imported rulings keep their own trust.
+    ///
+    /// Note the granularity: a single audit/feedback confirmation on one
+    /// key graduates *all* provisional rulings on that key's scope,
+    /// including ones written by earlier escalations. Entries carry no
+    /// decision linkage (origin = machine id, rulings are written before
+    /// the decision row exists), so per-decision promotion would need a
+    /// schema change — acceptable while `trust` only ranks and labels
+    /// injections and demote/contest paths exist to undo a bad promote.
     pub fn promote_rulings(&self, scope: &str, trust: f64) -> Result<usize> {
         self.with_conn(|c| {
             c.execute(
