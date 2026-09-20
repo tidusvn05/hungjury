@@ -188,7 +188,8 @@ Khi người hoặc audit phủ định một quyết định jury đã *decided
 
 ### Tin cậy & vòng đời rulings
 
-- **`min_quorum`** (mặc định 2): câu hỏi có ít hơn quorum ballot hợp lệ (juror timeout/lỗi) được coi là *hung* — một juror sống sót duy nhất không được âm thầm quyết định.
+- **`min_quorum`** (mặc định 2): câu hỏi có ít hơn quorum ballot hợp lệ (juror timeout/lỗi/abstain) được coi là *hung* — một juror sống sót duy nhất không được âm thầm quyết định.
+- **Score bimodal hung**: confidence của score = `min(1 − normalized_stddev, bucket_support)` — share phiếu chọn đúng level được báo. Phiếu {0, 2, 2} trên thang 0–2 báo legend "1" không ai chọn → support 0 → hung, thay vì mean 1.33 âm thầm quyết.
 - **Provisional rulings**: ruling mà judge rút ra từ một câu jury *không quyết được* (hung/quorum) ghi với `trust = memory.provisional_trust` (mặc định 0.4, thấp hơn judge thường 0.8). Nó chỉ được nâng lên full trust khi `feedback` hoặc `learn --audit` sau đó *tái xác nhận* verdict của judge trên scope đó.
 - **`supersedes`**: rulings trong prompt judge có gắn `[id:…]`; judge có thể retire ruling cũ khi viết ruling mới (`"supersedes": "<id-prefix>"`).
 - **`memory.ruling_ttl_days`** (mặc định 0 = tắt): rulings `active` quá N ngày tự thành `stale` mỗi lần `learn` chạy.

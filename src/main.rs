@@ -595,6 +595,8 @@ async fn cmd_memory(cmd: MemoryCmd, over: &CliOverrides, cfg_path: Option<&Path>
                         "at": d.created_at,
                         "decided_by": d.decided_by,
                         "hung": resp["hung"],
+                        "escalated": resp["escalated"],
+                        "sources": resp["sources"],
                         "answers": answers,
                     })
                 );

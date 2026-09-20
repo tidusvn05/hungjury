@@ -6,7 +6,10 @@
 //! - **choice**: `p_c = Σw_j[vote=c] / Σw_j`; winner = argmax (ties break by
 //!   criteria declaration order and always hang); `confidence = p1 − p2`.
 //! - **score**: `score = Σw_j·s_j / Σw_j`; `legend = criteria[round(score)]`;
-//!   `confidence = clamp(1 − stddev / ((L−1)/2), 0, 1)`.
+//!   `confidence = min(1 − stddev / ((L−1)/2), bucket_support)` where
+//!   `bucket_support` is the weight share voting exactly `round(score)` —
+//!   a bimodal vote (0 and 2 on a 0–2 scale) reports legend `1` almost
+//!   nobody picked, so support → 0 and the question hangs.
 //! - **noul**: `noul = p_true`; `confidence = |2·p_true − 1|`.
 //! - `n < 2` ⇒ `confidence = None`, never hung.
 
@@ -84,8 +87,10 @@ pub fn tally(q: &Question, votes: &Votes) -> AnswerOut {
             } else {
                 0.0
             };
+            let legend_idx =
+                (score.round().max(0.0) as usize).min(criteria.len().saturating_sub(1));
             let legend = criteria
-                .get(score.round().max(0.0) as usize)
+                .get(legend_idx)
                 .or_else(|| criteria.last())
                 .cloned()
                 .unwrap_or_default();
@@ -97,7 +102,17 @@ pub fn tally(q: &Question, votes: &Votes) -> AnswerOut {
                     / vw;
                 let stddev = var.sqrt();
                 let max_stddev = (criteria.len() as f64 - 1.0) / 2.0;
-                Some((1.0 - stddev / max_stddev).clamp(0.0, 1.0))
+                // Weight share that voted exactly the level we report —
+                // a mean that lands between two modes reports a legend
+                // nobody picked; bucket support pulls confidence to ~0.
+                let spread_conf = (1.0 - stddev / max_stddev).clamp(0.0, 1.0);
+                let bucket_support: f64 = valid
+                    .iter()
+                    .filter(|(_, s)| *s == legend_idx)
+                    .map(|(w, _)| w)
+                    .sum::<f64>()
+                    / vw;
+                Some(spread_conf.min(bucket_support))
             } else {
                 None
             };
@@ -294,6 +309,32 @@ mod tests {
     fn score_unanimous_confidence_one() {
         let a = tally(&score_q(3), &[(1.0, Ballot::Score(2)), (1.0, Ballot::Score(2))]);
         assert_eq!(a.confidence(), Some(1.0));
+    }
+
+    #[test]
+    fn score_bimodal_vote_hangs() {
+        // 0 and 2 on a 0–2 scale: mean 1.33 reports legend "1" that
+        // nobody voted — bucket support 0 ⇒ hung.
+        let q = score_q(3);
+        let votes = [
+            (1.0, Ballot::Score(0)),
+            (1.0, Ballot::Score(2)),
+            (1.0, Ballot::Score(2)),
+        ];
+        let a = tally(&q, &votes);
+        assert_eq!(a.confidence(), Some(0.0));
+        assert!(is_hung(&a, 0.5));
+
+        // Majority still carries the legend: {1,1,2} reports "1" with
+        // 67% support — decided, not hung.
+        let votes = [
+            (1.0, Ballot::Score(1)),
+            (1.0, Ballot::Score(1)),
+            (1.0, Ballot::Score(2)),
+        ];
+        let a = tally(&q, &votes);
+        assert!(!is_hung(&a, 0.5));
+        assert!((a.confidence().unwrap() - 0.528).abs() < 0.01);
     }
 
     #[test]

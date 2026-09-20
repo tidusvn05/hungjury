@@ -660,3 +660,16 @@ mất config). Giờ:
   **jury+memory 100%**, judge cold 96.6%, judge_informed 93.1%,
   `go.pass=true` — memory *giúp* trên use case thật (đối lập
   adversarial bench nơi nó poison).
+
+## 2026-09-20d — score bucket-support + re-eval multi-seed
+
+- **Score confidence** giờ `min(1 − normalized_stddev, bucket_support)`
+  — share phiếu chọn đúng level `round(mean)` được báo. Vote {0,2,2}
+  trên thang 0–2 trước quyết legend "1" (không ai chọn) → nay hung.
+  Vote {1,1,2} vẫn quyết (bucket "1" 67%).
+- `memory decisions` in thêm `sources` + `escalated` per decision.
+- **Re-eval multi-seed support-triage** (3 runs, n=10 test): jury
+  ~95.6%, jury+memory ~95.6%, judge ~94.3% — chênh lệch trong noise;
+  memory trung lập (không poison, không giúp rõ). Run "100%" đầu là
+  single-run fluke — multi-seed bắt buộc trước khi kết luận.
+- `go.pass` giờ false (đúng — gap ~0); hung_rate 0 qua các arm.

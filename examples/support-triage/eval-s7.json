@@ -1,0 +1,149 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.9333333333333333,
+      "calls": 10,
+      "calls_by_backend": {
+        "claude": 10
+      },
+      "correct": 28,
+      "decided": 30,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "is_urgent"
+        }
+      ],
+      "wall_ms_mean": 14035.0,
+      "wall_ms_p95": 22901
+    },
+    "judge_informed": {
+      "accuracy": 0.9333333333333333,
+      "calls": 10,
+      "calls_by_backend": {
+        "claude": 10
+      },
+      "correct": 28,
+      "decided": 30,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        },
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "is_urgent"
+        }
+      ],
+      "wall_ms_mean": 16975.5,
+      "wall_ms_p95": 24936
+    },
+    "jury": {
+      "accuracy": 0.9333333333333333,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 10,
+        "codex": 10,
+        "devin": 10
+      },
+      "correct": 28,
+      "decided": 30,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "is_urgent"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 19588.4,
+      "wall_ms_p95": 34036
+    },
+    "jury_memory": {
+      "accuracy": 0.9,
+      "calls": 30,
+      "calls_by_backend": {
+        "claude": 10,
+        "codex": 10,
+        "devin": 10
+      },
+      "correct": 27,
+      "decided": 30,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "mismatches": [
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "is_urgent"
+        },
+        {
+          "case": 3,
+          "expected": 2,
+          "got": 1,
+          "key": "frustration"
+        },
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "frustration"
+        }
+      ],
+      "wall_ms_mean": 17048.0,
+      "wall_ms_p95": 27529
+    }
+  },
+  "cases": 20,
+  "config": {
+    "escalate": "Queue",
+    "hung_threshold": 0.5,
+    "judge": "claude:opus@high",
+    "jurors": [
+      "claude:haiku",
+      "codex:gpt-5.6-terra@low",
+      "devin:swe-2-medium"
+    ],
+    "min_quorum": 2,
+    "samples": 1
+  },
+  "go": {
+    "accuracy_gap_jury_to_judge": 0.0,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "pass": false
+  },
+  "label": "support-triage",
+  "seed": 7,
+  "test": 10,
+  "train": 10
+}

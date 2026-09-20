@@ -21,18 +21,21 @@ hung → `queue_pending` (t19 "chargeback today" — jurors chia 2:1 vì nó
 vừa là deadline vừa là hăm dọa: đúng chỗ policy cần con người).
 
 **Eval arms trên use case này** (`hungjury eval cases.jsonl`, 10 train /
-10 test, seed 1 — `eval-report.json`):
+10 test — `eval-*.json`), 3 runs (non-deterministic agents ⇒ cùng seed
+cũng dao động ±7pts ở n=10):
 
-| arm | accuracy | calls |
-|---|---|---|
-| jury | 93.3% | 30 |
-| **jury+memory** | **100%** | 30 |
-| judge cold | 96.6% | 10 |
-| judge_informed | 93.1% | 10 |
+| arm | run cũ | seed 1 | seed 7 | mean |
+|---|---|---|---|---|
+| jury | 93.3% | 100% | 93.3% | ~95.6% |
+| jury+memory | 100% | 96.7% | 90.0% | ~95.6% |
+| judge cold | 96.6% | 93.1% | 93.3% | ~94.3% |
+| judge_informed | 93.1% | 96.6% | 93.3% | ~94.3% |
 
-`go.pass=true` — rulings judge ghi ở train pass giúp jury+memory đạt
-100% trên test (mẫu nhỏ, nhưng đây là bằng chứng đầu tiên memory *giúp*
-trên use case thật thay vì poison như adversarial bench).
+Kết luận trung thực: ở n=10 mọi chênh lệch nằm trong noise. Điều *đúng*
+là memory **không còn poison** ở use case này (policy.md align sẵn —
+khác adversarial bench), còn "memory giúp 100%" của run đầu là
+single-run fluke. Cần bộ case lớn hơn (~60+) mới phân biệt được jury vs
+judge vs +memory có ý nghĩa thống kê.
 
 ## pr-review — cổng review trên workspace
 
