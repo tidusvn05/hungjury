@@ -61,6 +61,21 @@ Prompt phân loại nhỏ, có schema, ba CLI chạy song song:
 
 Chạy song song thì thời gian chờ bằng juror chậm nhất. Memory không hạ được sàn này; nó giúp tốc độ bằng cách **giảm số lần phải leo thang lên model cao** và **giảm thời gian agent điều tra repo**.
 
+**Chọn model cho juror (spike 2026-09-20):** 20 case support-triage,
+juror đơn, `--escalate off --no-cache --no-memory`:
+
+| Model `@low` | Wall (20 case) | Accuracy | department | is_urgent | frustration |
+|---|---|---|---|---|---|
+| `gpt-5.6-terra` | 30.8s | 90% | 20/20 | 19/20 | 15/20 |
+| `gpt-5.6-luna` | 31.3s | 90% | 19/20 | 19/20 | 16/20 |
+| `gpt-5.6-sol` | 28.6s | 92% | 20/20 | 19/20 | 16/20 |
+
+Ba model ngang nhau trong nhiễu (sol hơn đúng 1 key); misses tập trung
+ở boundary `frustration` — noise của label, không phải model gap.
+Vì vậy mặc định là `codex:gpt-5.6-terra@low` cho juror; tier cao
+(`gpt-5.6-sol@high`, `claude:opus@high`) dành cho **judge** — nơi
+headroom đáng giá vì judge quyết các case khó/hung.
+
 Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHMARK.md), dataset + report trong [`bench/`](bench/).
 
 ## Cách dùng dự kiến
