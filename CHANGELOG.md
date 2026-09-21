@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `hungjury batch --pack N` — prompt batching: up to N consecutive
+  same-questions cases share one juror call (`{"<item_id>": {answers}}`
+  per-item ballots). Vote/quorum/hung/escalation/memory/cache stay
+  per-item; quota charges per call. Measured on the email-classification
+  spike: same 94% accuracy at ~3.6× speed and 12× fewer calls.
+  Workspace states are rejected (they can't share a prompt).
+- `examples/email-classification` — inbox triage use case run entirely
+  through the `devin` CLI (`swe-2-medium` + `gpt-5-6-luna-low` +
+  `gemini-3-8-flash-low` jurors, `claude-opus-5-high` judge).
+
+### Fixed
+
+- `eval`: `expected: "hung"` now counts correctly in judge arms; per-key
+  breakdowns and multi-seed `--seeds N` aggregation; `--audit-train K`
+  judge-audits jury decisions so memory arms always have rulings.
+- `doctor` no longer creates the memory db/schema as a side effect.
+- `learn --audit`/`--queue` skip corrupt decision rows instead of dying.
+- `lint` warns on empty `{}` questions and unanchored rubric levels.
+
 ## [0.1.0] - 2026-09-20
 
 Initial release.

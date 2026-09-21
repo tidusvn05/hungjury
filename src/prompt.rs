@@ -37,6 +37,7 @@ macro_rules! embedded {
 
 embedded! {
     "juror.md" => "../prompts/juror.md",
+    "juror_pack.md" => "../prompts/juror_pack.md",
     "judge.md" => "../prompts/judge.md",
     "consolidate.md" => "../prompts/consolidate.md",
 }

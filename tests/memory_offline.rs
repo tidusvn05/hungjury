@@ -898,7 +898,7 @@ async fn batch_decides_and_echoes_case_labels() {
     let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
     c.escalate = Escalate::Off;
     let ctx = ctx_with(c, backend);
-    let code = hungjury::batch::run(&ctx, &cases, Some(&out))
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out), 1)
         .await
         .unwrap();
     assert_eq!(code, 0);
@@ -933,13 +933,78 @@ async fn batch_loads_shared_questions_file() {
     let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
     c.escalate = Escalate::Off;
     let ctx = ctx_with(c, backend);
-    let code = hungjury::batch::run(&ctx, &cases, Some(&out))
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out), 1)
         .await
         .unwrap();
     assert_eq!(code, 0);
     let line: serde_json::Value =
         serde_json::from_str(std::fs::read_to_string(&out).unwrap().trim()).unwrap();
     assert_eq!(line["answers"]["q"]["choice"], "y");
+}
+
+/// `--pack N`: one juror call answers every item; vote/hung stay
+/// per-item. The mock extracts item ids from the prompt and returns a
+/// per-item answer object — one call must serve the whole pack.
+#[tokio::test]
+async fn batch_pack_answers_items_per_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let cases = dir.path().join("cases.jsonl");
+    std::fs::write(
+        &cases,
+        concat!(
+            r#"{"case": "a", "state": "refund me", "questions": {"q": {"type": "noul", "id": "k.q", "instructions": "urgent?"}}}"#,
+            "\n",
+            r#"{"case": "b", "state": "whenever", "questions": {"q": {"type": "noul", "id": "k.q", "instructions": "urgent?"}}}"#,
+            "\n",
+            r#"{"case": "c", "state": "???", "questions": {"q": {"type": "noul", "id": "k.q", "instructions": "urgent?"}}}"#,
+            "\n"
+        ),
+    )
+    .unwrap();
+    let out = dir.path().join("out.jsonl");
+    // Packed response: parse <item id="…"> tags out of the prompt, answer
+    // per item — "a" urgent, "b" not, "c" abstains (→ per-item hung).
+    let backend = MockBackend::new(|req| {
+        let ids: Vec<String> = req
+            .prompt
+            .match_indices("<item id=\"")
+            .map(|(i, _)| {
+                let rest = &req.prompt[i + 10..];
+                rest[..rest.find('"').unwrap()].to_string()
+            })
+            .collect();
+        if ids.is_empty() {
+            return Ok(r#"{"q": true}"#.to_string());
+        }
+        let mut map = serde_json::Map::new();
+        for (j, id) in ids.iter().enumerate() {
+            let v = match j {
+                0 => serde_json::json!(true),
+                1 => serde_json::json!(false),
+                _ => serde_json::json!("abstain"),
+            };
+            map.insert(id.clone(), serde_json::json!({"q": v}));
+        }
+        Ok(serde_json::Value::Object(map).to_string())
+    });
+    let mut c = cfg(&dir, &["mock:a", "mock:b"], "mock:j");
+    c.escalate = Escalate::Off;
+    let ctx = ctx_with(c, backend);
+    let code = hungjury::batch::run(&ctx, &cases, Some(&out), 3)
+        .await
+        .unwrap();
+    // "c" hangs on q (unanimous abstain → below quorum); batch's process
+    // exit stays 0 — hung is a per-line outcome, not an error.
+    assert_eq!(code, 0);
+    let lines: Vec<serde_json::Value> = std::fs::read_to_string(&out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0]["answers"]["q"]["noul"], 1.0);
+    assert_eq!(lines[1]["answers"]["q"]["noul"], 0.0);
+    assert_eq!(lines[2]["hung"], serde_json::json!(["q"]));
 }
 
 /// Every juror abstaining on a question = zero ballots → quorum-fail →

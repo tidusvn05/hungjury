@@ -286,6 +286,26 @@ pub fn ballot_schema(questions: &BTreeMap<String, Question>, explain: bool) -> s
     })
 }
 
+/// Packed-prompt schema: `{"<item_id>": <ballot object>, …}` — one full
+/// ballot per item id, so a single call answers every packed case.
+pub fn packed_ballot_schema(
+    questions: &BTreeMap<String, Question>,
+    item_ids: &[String],
+    explain: bool,
+) -> serde_json::Value {
+    let inner = ballot_schema(questions, explain);
+    let props: serde_json::Map<String, serde_json::Value> = item_ids
+        .iter()
+        .map(|id| (id.clone(), inner.clone()))
+        .collect();
+    serde_json::json!({
+        "type": "object",
+        "properties": props,
+        "required": item_ids.iter().map(|id| serde_json::Value::from(id.as_str())).collect::<Vec<_>>(),
+        "additionalProperties": false,
+    })
+}
+
 /// A validated ballot: `{key: Ballot}` + the optional `_why` map.
 pub type ValidatedBallot = (BTreeMap<String, Ballot>, Option<BTreeMap<String, String>>);
 

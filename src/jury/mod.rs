@@ -20,7 +20,7 @@ use crate::memory::retrieve::{self, Retrieval};
 use crate::memory::store::Store;
 use crate::memory::workspace;
 use crate::prompt::PromptLoader;
-use crate::question::{Ballot, ballot_schema};
+use crate::question::{Ballot, ballot_schema, packed_ballot_schema};
 use crate::quota::Quota;
 use crate::request::{Request, State};
 use crate::response::{AnswerOut, DecidedBy, JudgeUsage, JurorUsage, Response, Usage};
@@ -86,6 +86,66 @@ impl DecideCtx {
     }
 }
 
+/// Jury config folded into cache keys — answers can differ between
+/// packed and per-item contexts, so `pack` size is part of the key.
+fn jury_config(ctx: &DecideCtx, workspace_mode: bool, tmpl: &str, pack: usize) -> String {
+    serde_json::json!({
+        "jurors": ctx.config.jurors,
+        "samples": ctx.config.samples,
+        "judge": ctx.config.judge,
+        "threshold": ctx.config.hung_threshold,
+        "min_quorum": ctx.config.min_quorum,
+        "tools": workspace_mode,
+        "explain": ctx.config.explain,
+        "memory": ctx.config.memory.enabled,
+        "pack": pack,
+        // Policy + prompt text change answers — fold their hashes into
+        // the cache key so edits can't hit stale verdicts.
+        "policy": ctx.config.policy.as_deref().map(crate::util::sha256_str),
+        "prompt": crate::util::sha256_str(tmpl),
+    })
+    .to_string()
+}
+
+/// Scopes a request touches: `q:<qid>` per question (+ `ws:<repo>`).
+fn req_scopes(ctx: &DecideCtx, req: &Request, repo_id: Option<&str>) -> Vec<String> {
+    let mut scopes: Vec<String> = req
+        .questions
+        .values()
+        .map(|q| crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()))
+        .collect();
+    if let Some(r) = repo_id {
+        scopes.push(crate::memory::store::ws_scope(
+            ctx.config.namespace.as_deref(),
+            r,
+        ));
+    }
+    scopes
+}
+
+/// Memory epoch for cache keys: hash of active entry ids in scope.
+fn memory_epoch(ctx: &DecideCtx, scopes: &[String]) -> String {
+    match &ctx.store {
+        Some(s) => {
+            let ids = s.active_ids(scopes).unwrap_or_default();
+            crate::util::sha256_str(&ids.join(","))
+        }
+        None => String::new(),
+    }
+}
+
+/// Serve a cached response when present (marks decided_by/sources).
+fn cached_response(ctx: &DecideCtx, cache_key: &str) -> Option<(Response, i32)> {
+    let hit = ctx.cache.get(cache_key)?;
+    let mut resp = serde_json::from_value::<Response>(hit.response.clone()).ok()?;
+    resp.decided_by = DecidedBy::Cache;
+    resp.sources
+        .values_mut()
+        .for_each(|s| *s = DecidedBy::Cache);
+    let code = resp.exit_code();
+    Some((resp, code))
+}
+
 /// Run one decision. Returns the response + process exit code
 /// (`0` decided, `2` hung unresolved).
 pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
@@ -96,28 +156,8 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         State::Text(_) => None,
     };
     let repo_id = ws_path.as_deref().map(workspace::repo_id);
-
-    // Scopes this request touches: q:<qid> per question (+ ws:<repo_id>).
-    let mut scopes: Vec<String> = req
-        .questions
-        .values()
-        .map(|q| crate::memory::store::q_scope(ctx.config.namespace.as_deref(), &q.qid()))
-        .collect();
-    if let Some(r) = &repo_id {
-        scopes.push(crate::memory::store::ws_scope(
-            ctx.config.namespace.as_deref(),
-            r,
-        ));
-    }
-
-    // 0. Exact-match cache.
-    let memory_epoch = match &ctx.store {
-        Some(s) => {
-            let ids = s.active_ids(&scopes).unwrap_or_default();
-            crate::util::sha256_str(&ids.join(","))
-        }
-        None => String::new(),
-    };
+    let scopes = req_scopes(ctx, req, repo_id.as_deref());
+    let mem_epoch = memory_epoch(ctx, &scopes);
     let ws_stamp = ws_path.as_deref().and_then(workspace::workspace_stamp);
     if workspace_mode && ws_stamp.is_none() {
         tracing::info!("non-git workspace: decision will not be cached");
@@ -125,37 +165,12 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     // Load the juror template once — its hash joins the cache key so a
     // prompt edit can't hit stale verdicts (same argument as `policy`).
     let juror_tmpl = ctx.prompts.load("juror.md")?;
-    let jury_config = serde_json::json!({
-        "jurors": ctx.config.jurors,
-        "samples": ctx.config.samples,
-        "judge": ctx.config.judge,
-        "threshold": ctx.config.hung_threshold,
-        "min_quorum": ctx.config.min_quorum,
-        "tools": workspace_mode,
-        "explain": ctx.config.explain,
-        "memory": ctx.config.memory.enabled,
-        // Policy + prompt text change answers — fold their hashes into
-        // the cache key so edits can't hit stale verdicts.
-        "policy": ctx.config.policy.as_deref().map(crate::util::sha256_str),
-        "prompt": crate::util::sha256_str(&juror_tmpl),
-    })
-    .to_string();
-    let cache_key = Cache::key(
-        &req.canonical(),
-        &jury_config,
-        &memory_epoch,
-        ws_stamp.as_deref(),
-    );
+    let cfg_key = jury_config(ctx, workspace_mode, &juror_tmpl, 1);
+    let cache_key = Cache::key(&req.canonical(), &cfg_key, &mem_epoch, ws_stamp.as_deref());
     if (ws_stamp.is_some() || !workspace_mode)
-        && let Some(hit) = ctx.cache.get(&cache_key)
-        && let Ok(mut resp) = serde_json::from_value::<Response>(hit.response.clone())
+        && let Some(hit) = cached_response(ctx, &cache_key)
     {
-        resp.decided_by = DecidedBy::Cache;
-        resp.sources
-            .values_mut()
-            .for_each(|s| *s = DecidedBy::Cache);
-        let code = resp.exit_code();
-        return Ok((resp, code));
+        return Ok(hit);
     }
 
     // 1. Retrieve memory (in-process, before any spawn).
@@ -228,6 +243,40 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
         runs.push(r);
     }
 
+    finish_decision(
+        ctx,
+        req,
+        runs,
+        &retrieval,
+        &tag,
+        ws_path.as_deref(),
+        ws_stamp.as_deref(),
+        repo_id.as_deref(),
+        &cache_key,
+        1,
+        started,
+    )
+    .await
+}
+
+/// Vote → escalate → response → record → cache — the tail shared by
+/// `decide` (one case) and `decide_pack` (per item of a pack).
+/// `cost_share` amortizes the juror-call cost across packed items.
+#[allow(clippy::too_many_arguments)]
+async fn finish_decision(
+    ctx: &DecideCtx,
+    req: &Request,
+    runs: Vec<juror::JurorRun>,
+    retrieval: &Retrieval,
+    tag: &str,
+    ws_path: Option<&std::path::Path>,
+    ws_stamp: Option<&str>,
+    repo_id: Option<&str>,
+    cache_key: &str,
+    cost_share: usize,
+    started: Instant,
+) -> Result<(Response, i32)> {
+    let workspace_mode = req.state.is_workspace();
     // 4. Vote.
     let ok_ballots: Vec<(&str, &juror::BallotMap)> = runs
         .iter()
@@ -283,8 +332,8 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                     &juror_ballots,
                     &answers,
                     &hung,
-                    &tag,
-                    ws_path.as_deref(),
+                    tag,
+                    ws_path,
                 )
                 .await;
                 if let Some(call) = call {
@@ -300,8 +349,8 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
                             ctx.config.hung_threshold,
                             ctx.config.memory.provisional_trust,
                             ctx.config.namespace.as_deref(),
-                            repo_id.as_deref(),
-                            ws_path.as_deref(),
+                            repo_id,
+                            ws_path,
                             &ctx.config.judge,
                         )
                         .unwrap_or_default();
@@ -355,7 +404,7 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
             wall_ms: started.elapsed().as_millis() as u64,
             jurors: runs.iter().map(juror_usage).collect(),
             judge: judge_usage.clone(),
-            est_cost_usd: est_cost(ctx, &runs, judge_usage.as_ref()),
+            est_cost_usd: est_cost(ctx, &runs, judge_usage.as_ref(), cost_share),
         },
     };
     if let Some(store) = &ctx.store
@@ -378,23 +427,278 @@ pub async fn decide(ctx: &DecideCtx, req: &Request) -> Result<(Response, i32)> {
     if (ws_stamp.is_some() || !workspace_mode)
         && let Ok(v) = serde_json::to_value(&response)
     {
-        let _ = ctx.cache.put(&cache_key, &v);
+        let _ = ctx.cache.put(cache_key, &v);
     }
     let code = response.exit_code();
     Ok((response, code))
 }
 
+/// One case inside a `--pack` group. All items in a pack MUST share the
+/// same questions — `batch` splits groups at question boundaries.
+pub struct PackItem {
+    /// The case's request (text states only — workspaces can't share a
+    /// prompt, `batch` rejects them before grouping).
+    pub req: Request,
+}
+
+/// Decide a pack of same-questions cases with ONE juror call per juror
+/// (`batch --pack N`). Cache, memory retrieval, vote/quorum/hung and
+/// escalation all stay per-item — only the ballot *collection* is packed.
+/// Returns one result per item, in input order.
+pub async fn decide_pack(ctx: &DecideCtx, items: Vec<PackItem>) -> Vec<Result<(Response, i32)>> {
+    let started = Instant::now();
+    let n = items.len();
+
+    // Per-item cache keys; cached items short-circuit without a call.
+    let juror_tmpl = match ctx.prompts.load("juror_pack.md") {
+        Ok(t) => t,
+        Err(e) => return fail_all(items, e),
+    };
+    let cfg_key = jury_config(ctx, false, &juror_tmpl, n);
+    let mut results: Vec<Option<Result<(Response, i32)>>> = (0..n).map(|_| None).collect();
+    let mut cache_keys = Vec::with_capacity(n);
+    let mut pending: Vec<usize> = Vec::new();
+    for (pos, it) in items.iter().enumerate() {
+        let scopes = req_scopes(ctx, &it.req, None);
+        let epoch = memory_epoch(ctx, &scopes);
+        let key = Cache::key(&it.req.canonical(), &cfg_key, &epoch, None);
+        cache_keys.push(key);
+        match cached_response(ctx, &cache_keys[pos]) {
+            Some(hit) => results[pos] = Some(Ok(hit)),
+            None => pending.push(pos),
+        }
+    }
+
+    // Per-item memory retrieval — for uncached items only, aligned with
+    // `pending` (retrievals[j] ↔ items[pending[j]]).
+    let mut retrievals: Vec<Retrieval> = Vec::with_capacity(pending.len());
+    for &pos in &pending {
+        match retrieve_memory(ctx, &items[pos].req, None, None) {
+            Ok(r) => retrievals.push(r),
+            Err(e) => return fail_pending(results, &pending, e),
+        }
+    }
+    if pending.is_empty() {
+        return collect(results);
+    }
+
+    // Render the packed prompt: item ids carry a nonce so state content
+    // can't forge a neighbouring item's tag.
+    let tag = crate::util::nonce();
+    let item_ids: Vec<String> = (0..pending.len()).map(|j| format!("{tag}-i{j}")).collect();
+    let schema = packed_ballot_schema(
+        &items[pending[0]].req.questions,
+        &item_ids,
+        ctx.config.explain,
+    );
+    let prompt_with_mem = match render_pack_prompt(
+        ctx,
+        &items,
+        &pending,
+        &item_ids,
+        &retrievals,
+        &schema,
+        &juror_tmpl,
+        true,
+    ) {
+        Ok(p) => p,
+        Err(e) => return fail_pending(results, &pending, e),
+    };
+    let prompt_blind = if ctx.config.memory.blind_juror {
+        match render_pack_prompt(
+            ctx,
+            &items,
+            &pending,
+            &item_ids,
+            &retrievals,
+            &schema,
+            &juror_tmpl,
+            false,
+        ) {
+            Ok(p) => Some(p),
+            Err(e) => return fail_pending(results, &pending, e),
+        }
+    } else {
+        None
+    };
+    let system_prompt = system_prompt(ctx);
+    let questions = items[pending[0]].req.questions.clone();
+
+    // Spawn juror × sample packed calls in parallel.
+    let mut futures = FuturesUnordered::new();
+    let n_jurors = ctx.config.jurors.len();
+    for (i, model_str) in ctx.config.jurors.iter().enumerate() {
+        let (kind, model) = match BackendKind::parse(model_str) {
+            Ok(km) => km,
+            Err(e) => return fail_pending(results, &pending, e),
+        };
+        let backend = ctx.backend(kind);
+        for sample in 0..ctx.config.samples {
+            let blind = prompt_blind.is_some() && i == n_jurors - 1;
+            let prompt = if blind {
+                prompt_blind.clone().unwrap_or_default()
+            } else {
+                prompt_with_mem.clone()
+            };
+            let req_inner = AgentRequest {
+                prompt,
+                system_prompt: system_prompt.clone(),
+                model: model.clone(),
+                cwd: ctx.empty_cwd.path().to_path_buf(),
+                tools: ToolPolicy::None,
+                timeout: ctx.config.juror_timeout(false),
+                agent: format!("juror:{model_str}#{sample}"),
+                json_schema: Some(schema.clone()),
+            };
+            let questions = questions.clone();
+            let item_ids = item_ids.clone();
+            let explain = ctx.config.explain;
+            let retries = ctx.config.limits.retry_attempts;
+            let quota = &ctx.quota;
+            let sem = &ctx.semaphore;
+            let backend = backend.clone();
+            futures.push(async move {
+                let _permit = sem.acquire().await.ok();
+                juror::run_juror_packed(
+                    &backend, req_inner, &questions, &item_ids, explain, retries, quota,
+                )
+                .await
+            });
+        }
+    }
+    let mut packed_runs = Vec::new();
+    while let Some(r) = futures.next().await {
+        packed_runs.push(r);
+    }
+
+    // Per item: view the packed runs as ordinary JurorRuns, then reuse
+    // the whole vote/escalate/record tail.
+    for (j, pos) in pending.iter().enumerate() {
+        let item_runs: Vec<juror::JurorRun> = packed_runs
+            .iter()
+            .map(|pr| juror::JurorRun {
+                juror: pr.juror.clone(),
+                sample: pr.sample,
+                status: pr.status,
+                ms: pr.ms,
+                retries: pr.retries,
+                ballots: pr
+                    .item_ballots
+                    .as_ref()
+                    .and_then(|ib| ib.get(j).cloned().flatten()),
+                why: None,
+                error: pr.error.clone(),
+                usage: pr.usage.clone(),
+            })
+            .collect();
+        let it = &items[*pos];
+        let item_tag = format!("{tag}-i{j}");
+        let res = finish_decision(
+            ctx,
+            &it.req,
+            item_runs,
+            &retrievals[j],
+            &item_tag,
+            None,
+            None,
+            None,
+            &cache_keys[*pos],
+            pending.len(),
+            started,
+        )
+        .await;
+        results[*pos] = Some(res);
+    }
+    collect(results)
+}
+
+/// Unwrap the per-item option slots — every position is filled by the
+/// time this runs.
+fn collect(results: Vec<Option<Result<(Response, i32)>>>) -> Vec<Result<(Response, i32)>> {
+    results
+        .into_iter()
+        .map(|r| r.expect("every item resolved"))
+        .collect()
+}
+
+/// Every item fails — pack-level setup error before any slot resolved.
+fn fail_all(items: Vec<PackItem>, e: Error) -> Vec<Result<(Response, i32)>> {
+    let msg = e.to_string();
+    items
+        .into_iter()
+        .map(|_| Err(Error::Request(msg.clone())))
+        .collect()
+}
+
+/// Pack-level error after some items resolved from cache — only pending
+/// positions get the error.
+fn fail_pending(
+    mut results: Vec<Option<Result<(Response, i32)>>>,
+    pending: &[usize],
+    e: Error,
+) -> Vec<Result<(Response, i32)>> {
+    let msg = e.to_string();
+    for &pos in pending {
+        results[pos] = Some(Err(Error::Request(msg.clone())));
+    }
+    collect(results)
+}
+
+/// Render `juror_pack.md`: one `<item>` per uncached case, memory block
+/// embedded inside its own item tag (precedents must not bleed across
+/// items). `with_memory=false` renders the blind-juror variant.
+#[allow(clippy::too_many_arguments)]
+fn render_pack_prompt(
+    ctx: &DecideCtx,
+    items: &[PackItem],
+    pending: &[usize],
+    item_ids: &[String],
+    retrievals: &[Retrieval],
+    schema: &serde_json::Value,
+    tmpl: &str,
+    with_memory: bool,
+) -> Result<String> {
+    let items_block = pending
+        .iter()
+        .zip(item_ids)
+        .enumerate()
+        .map(|(j, (&pos, id))| {
+            let state = state_render(&items[pos].req);
+            let mem = if with_memory {
+                retrievals[j].block.as_str()
+            } else {
+                ""
+            };
+            format!("<item id=\"{id}\">\n{state}\n{mem}</item>")
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut vars: HashMap<&str, String> = HashMap::new();
+    vars.insert("schema_block", schema_block_text(schema));
+    vars.insert("policy_block", policy_block(ctx));
+    vars.insert("questions_block", questions_render(&items[pending[0]].req));
+    vars.insert("items_block", items_block);
+    Ok(crate::prompt::render(tmpl, &vars))
+}
+
 /// Estimated USD cost of this decision from `[costs]` — `None` unless at
-/// least one backend has a configured price.
-fn est_cost(ctx: &DecideCtx, runs: &[juror::JurorRun], judge: Option<&JudgeUsage>) -> Option<f64> {
+/// least one backend has a configured price. `share` amortizes a packed
+/// call's cost across the items it answered (1 for a single decide).
+fn est_cost(
+    ctx: &DecideCtx,
+    runs: &[juror::JurorRun],
+    judge: Option<&JudgeUsage>,
+    share: usize,
+) -> Option<f64> {
     if ctx.config.costs.is_empty() {
         return None;
     }
+    let share = share.max(1) as f64;
     let mut total = 0.0;
     let mut any = false;
     for r in runs {
         if let Some(p) = ctx.config.cost_per_call(&r.juror) {
-            total += p * (1.0 + r.retries as f64);
+            total += p * (1.0 + r.retries as f64) / share;
             any = true;
         }
     }

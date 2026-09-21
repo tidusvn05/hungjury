@@ -185,6 +185,11 @@ struct BatchArgs {
     /// Output JSONL path (default: stdout).
     #[arg(long)]
     out: Option<PathBuf>,
+    /// Prompt batching: up to N consecutive same-questions cases share
+    /// ONE juror call (per-item vote/hung/escalation preserved).
+    /// Text states only; `1` = one call per case per juror (default).
+    #[arg(long, default_value = "1")]
+    pack: usize,
 }
 
 #[derive(Args)]
@@ -378,7 +383,7 @@ async fn dispatch(
         }
         Cmd::Batch(args) => {
             let (_cfg, ctx) = load_ctx(over, cfg_path)?;
-            hungjury::batch::run(&ctx, &args.cases, args.out.as_deref()).await
+            hungjury::batch::run(&ctx, &args.cases, args.out.as_deref(), args.pack.max(1)).await
         }
         Cmd::Eval(args) => {
             let report = args.report.clone().unwrap_or_else(|| match &args.label {

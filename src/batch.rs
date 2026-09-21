@@ -8,13 +8,19 @@
 //! `{case, id, answers, decided_by, hung, exit}`; failures become
 //! `{case, error}`. Quota exhaustion fails fast per case (the daily cap
 //! check happens before any spawn, so no calls are wasted once spent).
+//!
+//! `--pack N` switches to prompt batching: up to N consecutive
+//! same-questions cases share ONE juror call (the juror answers every
+//! item in a single response). Vote/quorum/hung/escalation stay
+//! per-item; quota is spent per *call* — a pack of N costs one call per
+//! juror instead of N.
 
 use std::path::Path;
 
 use futures_util::stream::{self, StreamExt};
 
 use crate::error::{Error, Result};
-use crate::jury::{self, DecideCtx};
+use crate::jury::{self, DecideCtx, PackItem};
 use crate::request::Request;
 
 /// One completed case: input index, echoed `case` label, decide result.
@@ -27,7 +33,7 @@ type CaseResult = (
 /// Run `decide` over every line of `cases`; write JSONL to `out`
 /// (stdout when `None`). Returns a process exit code: 0 when every case
 /// ran (hung included), 1 when any case errored.
-pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>) -> Result<u8> {
+pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>, pack: usize) -> Result<u8> {
     let text = std::fs::read_to_string(cases).map_err(|e| Error::io(cases, e))?;
     let mut cases_v = Vec::new();
     for (i, line) in text.lines().enumerate() {
@@ -51,17 +57,60 @@ pub async fn run(ctx: &DecideCtx, cases: &Path, out: Option<&Path>) -> Result<u8
     if cases_v.is_empty() {
         return Err(Error::Request(format!("{}: no cases", cases.display())));
     }
+    if pack > 1 && cases_v.iter().any(|(_, _, r)| r.state.is_workspace()) {
+        return Err(Error::Request(
+            "--pack requires text states — workspace cases can't share a prompt".into(),
+        ));
+    }
 
     let n = cases_v.len();
     let par = ctx.config.limits.max_concurrency.max(1);
-    let results: Vec<CaseResult> = stream::iter(
-        cases_v
-            .into_iter()
-            .map(|(i, label, r)| async move { (i, label, jury::decide(ctx, &r).await) }),
-    )
-    .buffer_unordered(par)
-    .collect()
-    .await;
+    let results: Vec<CaseResult> = if pack > 1 {
+        // Group consecutive same-questions cases into packs of ≤N —
+        // a question-set change starts a new pack (packed prompt has
+        // exactly one Questions section).
+        let mut groups: Vec<Vec<(usize, serde_json::Value, Request)>> = Vec::new();
+        for (i, label, req) in cases_v {
+            let fits = groups.last().is_some_and(|g: &Vec<_>| {
+                g.len() < pack
+                    && serde_json::to_value(&g[0].2.questions).ok()
+                        == serde_json::to_value(&req.questions).ok()
+            });
+            if !fits {
+                groups.push(Vec::new());
+            }
+            groups
+                .last_mut()
+                .expect("just pushed")
+                .push((i, label, req));
+        }
+        stream::iter(groups.into_iter().map(|g| async move {
+            let idx: Vec<usize> = g.iter().map(|(i, _, _)| *i).collect();
+            let labels: Vec<serde_json::Value> = g.iter().map(|(_, l, _)| l.clone()).collect();
+            let items: Vec<PackItem> = g.into_iter().map(|(_, _, req)| PackItem { req }).collect();
+            let res = jury::decide_pack(ctx, items).await;
+            idx.into_iter()
+                .zip(labels)
+                .zip(res)
+                .map(|((i, l), r)| (i, l, r))
+                .collect::<Vec<CaseResult>>()
+        }))
+        .buffer_unordered(par)
+        .collect::<Vec<Vec<CaseResult>>>()
+        .await
+        .into_iter()
+        .flatten()
+        .collect()
+    } else {
+        stream::iter(
+            cases_v
+                .into_iter()
+                .map(|(i, label, r)| async move { (i, label, jury::decide(ctx, &r).await) }),
+        )
+        .buffer_unordered(par)
+        .collect()
+        .await
+    };
 
     let mut lines = vec![String::new(); n];
     let (mut decided, mut hung, mut failed) = (0usize, 0usize, 0usize);

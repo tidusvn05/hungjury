@@ -227,6 +227,11 @@ folder hung đúng. Hai miss đều là hung defensible: e12
 mơ hồ; e11 `priority` trên mail rỗng — pattern over-abstention trên
 score cho empty content đã biết.
 
+**Packed mode** (`batch --pack 12` — mỗi juror một call cho cả 12 mail):
+cùng 34/36 = 94% nhưng chỉ **9.2s và 3 calls** (vs 33s/36 calls).
+Per-item hung vẫn hoạt động: e11 hung đúng trong khi 11 items khác
+quyết bình thường.
+
 ## Bài học từ spike
 
 - **Hung bắt *bất đồng*, `"abstain"` bắt *thiếu thông tin*.** t12

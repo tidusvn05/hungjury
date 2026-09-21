@@ -100,6 +100,23 @@ vì batch song song hoá cross-case qua `max_concurrency`, còn vòng lặp
 `batch`; SDK cũng có `decide` song song ở phía caller nhưng batch còn rẻ
 hơn nhờ chia sẻ config/memory handle.
 
+**`batch --pack N` — prompt batching** (12 emails, all-devin jury, đo
+trực tiếp): gom N case vào **một** call mỗi juror, juror trả ballot
+per-item `{"<id>": {answers}}`. Vote/quorum/hung/escalation vẫn tính
+per-item — chỉ phần thu ballot được gom.
+
+| Mode | Calls (3 jurors) | Wall | Accuracy |
+|---|---|---|---|
+| `batch` (pack=1, concurrent) | 36 | ~33s | 34/36 = 94% |
+| `batch --pack 12` | 3 | **9.2s** | 34/36 = **94%** |
+
+Cùng accuracy, ~3.6× nhanh, 12× ít calls — misses giống nhau (e11 mail
+rỗng → abstain đúng pattern đã biết). Spike trước đó với prompt tay cho
+kết quả tương tự (94% ở pack@4 lẫn pack@12). Trade-off: items chia sẻ
+context nên case cực đoan có thể ảnh hưởng lẫn nhau (chưa thấy trên
+dataset này), và prompt phình theo N — với state dài, giữ pack nhỏ
+(4–10). Cache key gồm pack size nên kết quả packed/unpacked không lẫn.
+
 Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHMARK.md), dataset + report trong [`bench/`](bench/).
 
 ## Cách dùng dự kiến
