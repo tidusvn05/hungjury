@@ -76,6 +76,23 @@ Vì vậy mặc định là `codex:gpt-5.6-terra@low` cho juror; tier cao
 (`gpt-5.6-sol@high`, `claude:opus@high`) dành cho **judge** — nơi
 headroom đáng giá vì judge quyết các case khó/hung.
 
+**Throughput theo backend (spike 2026-09-20):** 1 juror mỗi run,
+`--min-quorum 1 --escalate off --no-cache --no-memory`, 50 case
+adversarial (3 câu hỏi/case, 1 call trả hết), `max_concurrency=6`
+mặc định:
+
+| Juror | Đơn (1 case) | batch@10 | batch@20 | batch@50 | ≈/case @50 |
+|---|---|---|---|---|---|
+| `devin:swe-2-medium` | 5.3s | 12.4s | 21.5s | 49.5s | ~1.0s |
+| `codex:gpt-5.6-terra@low` | 7.2s | 17.5s | 36.6s | 74.5s | ~1.5s |
+| `claude:haiku` | 8.8s | 48.7s | 63.4s | 115.1s | ~2.3s |
+
+Đọc bảng: single-call trả ~5–9s bất kể backend (CLI spawn + roundtrip
+chiếm gần hết); trong batch, throughput ≈ `max_concurrency` ÷ latency
+— `devin:swe-2-medium` vừa nhanh nhất vừa free. Muốn nhanh hơn: tăng
+`[limits] max_concurrency` (chú ý rate-limit của từng CLI), hoặc bật
+cache/memory để case lặp về ~0s.
+
 Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHMARK.md), dataset + report trong [`bench/`](bench/).
 
 ## Cách dùng dự kiến
@@ -378,7 +395,7 @@ Dồn mọi câu hỏi vào **một prompt** cho mỗi juror. Chi phí khởi đ
 ## Quyết định còn mở
 
 - [ ] Memory có thật sự kéo được model thấp lên gần model cao không — trả lời bằng thí nghiệm `eval` ở Phase 2 (mốc go/no-go, xem PLAN).
-- [ ] Model juror mặc định cho devin (`swe-2-medium` miễn phí và khác họ model ⇒ phiếu độc lập hơn, hay `gpt-5-6-terra-low`) — chốt sau khi đo latency.
+- [x] Model juror mặc định cho devin — chốt `swe-2-medium`: free, latency thấp nhất trong spike (~1.0s/case @concurrency 6), khác họ model với claude/codex ⇒ phiếu độc lập hơn.
 - [ ] Cấu hình tool chỉ-đọc cho `claude -p` khi không bypass permission — cần kiểm ở Phase 0.
 - [ ] Tách lớp backend dùng chung với agentwiki thành crate riêng (sau khi API ổn định).
 
