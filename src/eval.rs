@@ -150,6 +150,9 @@ struct ArmStats {
     /// Per-question-key decided/correct — surfaces which question is
     /// the weak axis (e.g. `frustration`) without reading mismatches.
     per_key: BTreeMap<String, [usize; 2]>,
+    /// Expected keys never scored — the case's decide/judge call failed,
+    /// so `decided + hung + unscored` = total expected keys.
+    unscored: usize,
 }
 
 impl ArmStats {
@@ -197,6 +200,12 @@ fn note_mismatch(
             "case": case, "key": key, "expected": want, "got": got,
         }));
     }
+}
+
+/// Expected keys of a case whose decide/judge call failed — neither
+/// decided nor hung, so without this counter they vanish from the arm.
+fn note_failure(stats: &mut ArmStats, expected: &BTreeMap<String, serde_json::Value>) {
+    stats.unscored += expected.len();
 }
 
 /// Accumulate one response into an arm.
@@ -458,6 +467,9 @@ async fn run_seed(
     );
 
     // Pass 1: train — `decide --escalate sync` populates memory.
+    let mut train_escalations = 0usize;
+    let mut rulings_written = 0usize;
+    let mut contested_written = 0usize;
     {
         let mut over = base.clone();
         over.escalate = Some(Escalate::Sync);
@@ -475,7 +487,12 @@ async fn run_seed(
         .await;
         for (i, r) in results {
             match r {
-                Ok(_) => eprintln!("  train {}/{} done", i + 1, train.len()),
+                Ok((resp, _)) => {
+                    if resp.usage.judge.is_some() {
+                        train_escalations += 1;
+                    }
+                    eprintln!("  train {}/{} done", i + 1, train.len());
+                }
                 Err(e) => eprintln!("  train {}/{} failed: {e}", i + 1, train.len()),
             }
         }
@@ -483,6 +500,18 @@ async fn run_seed(
         // rulings exist even when the jury never hung (learn --audit).
         if audit_train > 0 {
             crate::learn::learn_audit(&ctx, audit_train, true, false).await?;
+        }
+        // What training persisted — previously only auditable from the
+        // throwaway memory db before it was deleted.
+        if let Some(store) = &ctx.store {
+            for (kind, status, n) in store.counts().unwrap_or_default() {
+                if kind == "ruling" {
+                    rulings_written += n as usize;
+                }
+                if status == "contested" {
+                    contested_written += n as usize;
+                }
+            }
         }
     }
 
@@ -510,7 +539,10 @@ async fn run_seed(
                     score_response(&mut jury_stats, i, &resp, &test[i].expected);
                     jury_resps[i] = Some(resp);
                 }
-                Err(e) => eprintln!("  jury test {}/{} failed: {e}", i + 1, test.len()),
+                Err(e) => {
+                    note_failure(&mut jury_stats, &test[i].expected);
+                    eprintln!("  jury test {}/{} failed: {e}", i + 1, test.len());
+                }
             }
         }
     }
@@ -535,7 +567,10 @@ async fn run_seed(
         for (i, r) in results {
             match r {
                 Ok((resp, _)) => score_response(&mut mem_stats, i, &resp, &test[i].expected),
-                Err(e) => eprintln!("  mem test {}/{} failed: {e}", i + 1, test.len()),
+                Err(e) => {
+                    note_failure(&mut mem_stats, &test[i].expected);
+                    eprintln!("  mem test {}/{} failed: {e}", i + 1, test.len());
+                }
             }
         }
     }
@@ -591,12 +626,15 @@ async fn run_seed(
             judge_stats.walls.push(usage.ms);
             match call {
                 Some(call) => score_judge(&mut judge_stats, i, &call, &test[i].expected),
-                None => eprintln!(
-                    "  judge test {}/{} failed: {}",
-                    i + 1,
-                    test.len(),
-                    usage.error.unwrap_or_default()
-                ),
+                None => {
+                    note_failure(&mut judge_stats, &test[i].expected);
+                    eprintln!(
+                        "  judge test {}/{} failed: {}",
+                        i + 1,
+                        test.len(),
+                        usage.error.unwrap_or_default()
+                    );
+                }
             }
         }
     }
@@ -685,12 +723,15 @@ async fn run_seed(
             informed_stats.walls.push(usage.ms);
             match call {
                 Some(call) => score_judge(&mut informed_stats, i, &call, &test[i].expected),
-                None => eprintln!(
-                    "  informed test {}/{} failed: {}",
-                    i + 1,
-                    test.len(),
-                    usage.error.unwrap_or_default()
-                ),
+                None => {
+                    note_failure(&mut informed_stats, &test[i].expected);
+                    eprintln!(
+                        "  informed test {}/{} failed: {}",
+                        i + 1,
+                        test.len(),
+                        usage.error.unwrap_or_default()
+                    );
+                }
             }
         }
     }
@@ -723,6 +764,9 @@ async fn run_seed(
         "label": label,
         "cases": n,
         "train": train.len(),
+        "train_escalations": train_escalations,
+        "rulings_written": rulings_written,
+        "contested_written": contested_written,
         "test": test.len(),
         "seed": seed,
         "config": {
@@ -766,6 +810,7 @@ fn arm_json(s: &ArmStats) -> serde_json::Value {
     serde_json::json!({
         "decided": s.decided,
         "hung": s.hung,
+        "unscored": s.unscored,
         "correct": s.correct,
         "accuracy": s.accuracy(),
         "hung_rate": s.hung_rate(),
@@ -993,6 +1038,63 @@ mod tests {
         score_response(&mut stats2, 0, &resp2, &expected);
         assert_eq!(stats2.correct, 0);
         assert_eq!(stats2.mismatches[0]["got"], json!("missing"));
+    }
+
+    #[test]
+    fn unscored_explains_decided_hung_gap() {
+        use crate::response::{DecidedBy, MemoryUse, Response, Usage};
+        // One scored case (1 decided key, 1 hung key) plus one case whose
+        // call failed (3 expected keys): decided + hung + unscored must
+        // account for every expected key — the audit gap that produced
+        // "decided=87, hung=0 on 90 keys".
+        let resp = Response {
+            id: "dec_x".into(),
+            decided_by: DecidedBy::Jury,
+            answers: BTreeMap::from([
+                (
+                    "a".into(),
+                    AnswerOut::Choice {
+                        choice: "x".into(),
+                        probabilities: BTreeMap::new(),
+                        confidence: Some(0.9),
+                        judge: None,
+                    },
+                ),
+                (
+                    "b".into(),
+                    AnswerOut::Noul {
+                        noul: 0.5,
+                        confidence: None,
+                        judge: None,
+                    },
+                ),
+            ]),
+            hung: vec!["b".into()],
+            escalated: vec![],
+            sources: BTreeMap::new(),
+            memory: MemoryUse::default(),
+            usage: Usage {
+                wall_ms: 0,
+                jurors: vec![],
+                judge: None,
+                est_cost_usd: None,
+            },
+        };
+        let mut stats = ArmStats::default();
+        let expected = BTreeMap::from([("a".into(), json!("x")), ("b".into(), json!(true))]);
+        score_response(&mut stats, 0, &resp, &expected);
+        note_failure(
+            &mut stats,
+            &BTreeMap::from([
+                ("c".into(), json!("x")),
+                ("d".into(), json!(true)),
+                ("e".into(), json!(1)),
+            ]),
+        );
+        let j = arm_json(&stats);
+        assert_eq!(j["decided"], json!(1));
+        assert_eq!(j["hung"], json!(1));
+        assert_eq!(j["unscored"], json!(3));
     }
 
     #[test]

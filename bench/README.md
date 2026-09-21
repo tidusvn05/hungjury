@@ -99,3 +99,40 @@ SEED=42 REPORT=report_policy.json \
 ```
 
 Changing the policy file changes the cache key, so no stale decisions.
+
+## Microbenchmarks (appendix runner)
+
+`bench/microbench.sh` reproduces the raw numbers behind the
+[`../docs/BENCHMARK.md`](../docs/BENCHMARK.md) appendix. Each measurement
+appends one line to `bench/micro/<group>.jsonl`:
+
+```
+{"bench","variant","backend","model","n_cases","pack_size","samples",
+ "wall_ms","calls","exit","timestamp","git_rev"}
+```
+
+`calls` is counted from the run's `$HUNGJURY_HOME/calls.jsonl` audit log.
+Every measurement runs in a fresh `bench/micro/home-*/` dir (gitignored
+via `bench/*/home*/`) that keeps `stdout.log`, `stderr.log` and the
+batch `--out` file as evidence. Conditions mirror the appendix: one
+juror per run, `--min-quorum 1`, `--escalate off --no-cache --no-memory`,
+`max_concurrency=6` (binary default — bench.toml uses 8).
+
+```bash
+cargo build                          # or BIN=./target/release/hungjury
+bench/microbench.sh latency          # 1 decide per backend, in parallel —   ~3 calls
+bench/microbench.sh juror-models     # codex terra/luna/sol @low, 20 cases — ~60 calls
+bench/microbench.sh throughput       # decide + batch@10/20/50, 3 backends — ~243 calls
+bench/microbench.sh pack             # seq decides vs batch vs --pack N —     ~59 calls
+bench/microbench.sh all              # everything —                          ~365 calls
+```
+
+**Quota warning:** every group spawns real juror CLIs and burns real
+quota — `all` is ~365 calls (bounded by a generated config with
+`daily_cap=5000`, same as `bench.toml`). `throughput` is the expensive
+one; run groups individually if the day's budget is tight.
+
+Overrides via env (see the script header for the full list):
+`MAX_CONCURRENCY=8` to match `bench.toml` conditions, `JUROR_MODELS`,
+`THROUGHPUT_BACKENDS`/`THROUGHPUT_SIZES`, `PACK_N`/`PACK_SAMPLES`,
+`*_CASES` to point at a different `cases.jsonl`.
