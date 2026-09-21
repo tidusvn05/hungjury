@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-21
+
+### Added
+
+- `examples/email-classification/results-pack12.jsonl` — committed
+  evidence for `batch --pack 12`: 12 cases answered by 3 juror calls
+  (per-item hung preserved: the empty mail hung inside the pack while
+  its 11 neighbours decided).
+
+### Changed
+
+- Packed-mode docs now report both runs honestly (92–94% accuracy at
+  ~9s/3 calls vs ~33s/36 calls unpacked) instead of the first run alone.
+
 ## [0.2.0] - 2026-09-21
 
 ### Added
