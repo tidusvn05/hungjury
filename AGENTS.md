@@ -46,6 +46,8 @@ Steps:
 ```bash
 # 1. Bump version in Cargo.toml; move/add the "## [X.Y.Z] - YYYY-MM-DD"
 #    section in CHANGELOG.md (keepachangelog format).
+#    Then run `cargo check` so Cargo.lock records the new version —
+#    the verify job uses --locked and fails if the lockfile is stale.
 # 2. Commit with the Tidusvn05 identity above.
 # 3. Tag (annotated) and push:
 git tag -a vX.Y.Z -m "hungjury vX.Y.Z — short summary"
