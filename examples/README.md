@@ -199,6 +199,34 @@ credible-threat), m2 profanity+refund, m10 "dumb take lol" — jury chia
 được thiết kế, không phải lỗi: hung trên case tranh chấp thật có giá
 trị hơn một quyết định tự tin nhưng ngẫu nhiên.
 
+## email-classification — inbox triage (all-devin jury)
+
+```bash
+cd examples/email-classification
+hungjury batch cases.jsonl --out results.jsonl   # 12 emails, ~33s
+python3 ../score.py cases.jsonl results.jsonl
+```
+
+Khác `spam-filter` (chuyên detect lừa đảo): đây là **triage toàn hộp
+thư** — `folder` choice (work/personal/promotions/updates/spam theo
+precedence "spam markers trước, rồi human-direct, automated, bulk"),
+`action_required` noul (request trong spam *không* tính — đừng hiện
+việc cho user làm khi mail độc hại), `priority` score 0–2.
+
+Jury đơn-backend — `devin:swe-2-medium` (free) + `devin:gpt-5-6-luna-low`
++ `devin:gemini-3-8-flash-low` — chứng minh hungjury chỉ cần **một CLI**
+miễn jurors là các model khác nhau: disagreement signal vẫn đến từ
+diversity. Judge `devin:claude-opus-5-high`, `escalate=queue`.
+
+**Kết quả:** 34/36 = 94% trong ~33s (≈2.8s/case, 3 juror song song);
+`folder` **12/12** — kể cả mail quảng cáo tiếng Việt → promotions,
+phishing mạo danh IT → spam + action_required=false, colleague forward
+mail khuyến mãi → work (message tới mình là personal), mail `"?"` →
+folder hung đúng. Hai miss đều là hung defensible: e12
+"take a look when you can" — FYI hay action? jury chia đúng boundary
+mơ hồ; e11 `priority` trên mail rỗng — pattern over-abstention trên
+score cho empty content đã biết.
+
 ## Bài học từ spike
 
 - **Hung bắt *bất đồng*, `"abstain"` bắt *thiếu thông tin*.** t12

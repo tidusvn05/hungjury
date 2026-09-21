@@ -252,7 +252,7 @@ TypeScript: `sdk/typescript/` — zero-dep Node wrapper cùng hình dạng (`dec
 
 ## Use cases thực tế
 
-Sáu kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
+Bảy kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
 
 ### `support-triage` — phân luồng ticket
 
@@ -292,6 +292,12 @@ Sáu kịch bản runnable trong `examples/` — mỗi cái là một project `.
 
 - **State**: user content; **câu hỏi**: `choice` action (allow/warn/remove/escalate_human), `score` severity, `noul` illegal_or_safety.
 - **Đo được**: 26/30 = 87%, severity 10/10. 3 `action` hung đều là **borderline thật** — "kill yourself" là remove hay escalate phụ thuộc credible-threat, jury chia đúng chỗ policy mơ hồ → escalate=queue đưa case đó cho người, đúng thiết kế.
+
+### `email-classification` — inbox triage (all-devin jury)
+
+- **State**: raw email; **câu hỏi**: `choice` folder (work/personal/promotions/updates/spam), `noul` action_required (request trong spam *không* tính), `score` priority.
+- Jury đơn-backend: `devin:swe-2-medium` + `devin:gpt-5-6-luna-low` + `devin:gemini-3-8-flash-low` — chứng minh chỉ cần **một CLI**, diversity đến từ model khác nhau.
+- **Đo được**: 34/36 = 94% (~2.8s/case), `folder` 12/12 kể cả mail tiếng Việt và forward-boundary. Hai miss đều là hung defensible trên boundary mơ hồ thật.
 
 ### Khi nào nên/không nên dùng
 

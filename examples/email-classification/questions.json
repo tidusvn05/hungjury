@@ -1,0 +1,30 @@
+{
+  "folder": {
+    "type": "choice",
+    "id": "mail.folder",
+    "instructions": "Which mailbox folder this mail belongs in. Check spam markers (deception, credential asks, spoofed domains) BEFORE anything else. A human-written forward from a colleague is 'work' even when the forwarded content is promotional — the message to you is personal. Abstain when the mail carries no interpretable content.",
+    "criteria": {
+      "work": "Business collaboration sent to the recipient personally — colleagues, clients, meeting invites, review requests, project threads",
+      "personal": "Human-written mail from friends, family, acquaintances",
+      "promotions": "Opt-in bulk marketing — sales, deals, newsletters, product announcements; unsubscribe link or recognizable branding, no deception",
+      "updates": "Automated service notifications about the recipient's own accounts — order confirmations, shipping, receipts, calendar reminders, security alerts",
+      "spam": "Unsolicited or deceptive mail — phishing, scams, fake warnings, mass outreach pretending to know the recipient"
+    }
+  },
+  "action_required": {
+    "type": "noul",
+    "id": "mail.action_required",
+    "instructions": "True only when the mail legitimately expects the recipient to DO something — reply, RSVP, pay, review, reset a compromised password. Requests inside spam/phishing do NOT count — never surface a malicious request as an action. Newsletters and receipts are FYI — does NOT count even when they contain buttons.",
+    "criteria": {}
+  },
+  "priority": {
+    "type": "score",
+    "id": "mail.priority",
+    "instructions": "How soon the recipient needs to see this",
+    "criteria": [
+      "Can wait or archive — newsletters, receipts, FYI forwards, marketing; 'unsubscribe', 'your order has shipped', 'weekly digest'",
+      "Read today — actionable, no imminent deadline; 'RSVP by Friday', 'can you take a look this week'",
+      "Act now — deadline within ~24h, blocking someone, or a security alert affecting the recipient; 'due tomorrow 9am', 'EOD today', 'unusual sign-in'. Does NOT count: marketing urgency ('sale ends tonight') or deadlines inside spam"
+    ]
+  }
+}
