@@ -254,7 +254,7 @@ TypeScript: `sdk/typescript/` — zero-dep Node wrapper cùng hình dạng (`dec
 
 Bảy kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
 
-### `support-triage` — phân luồng ticket
+### [`support-triage`](examples/support-triage) — phân luồng ticket
 
 - **State**: text ticket; **câu hỏi**: `choice` (department), `score` (frustration), `noul` (is_urgent).
 - **Policy** đóng vai trò quyết định: "request đầu tiên là primary", "ASAP lịch sự không tính urgent". Không có nó, mỗi juror tự vẽ ranh giới → hung nhiều.
@@ -262,7 +262,7 @@ Bảy kịch bản runnable trong `examples/` — mỗi cái là một project `
 - Chạy: `hungjury batch cases.jsonl --out results.jsonl` → 1 JSONL với `case`/`answers`/`decided_by`/`exit` — join được về ticket gốc.
 - **Đo được**: 93% theo expected labels viết tay (56/60 keys); case hung duy nhất là tranh chấp thật giữa hai luật policy → đúng chỗ cần con người.
 
-### `pr-review` — cổng review trước merge
+### [`pr-review`](examples/pr-review) — cổng review trước merge
 
 - **State**: workspace (repo thật); juror được công cụ đọc-code, tự khám phá theo `hint` ("xem diff nhánh này so với main").
 - **Câu hỏi**: `noul` needs_review/breaking, `score` risk.
@@ -270,30 +270,30 @@ Bảy kịch bản runnable trong `examples/` — mỗi cái là một project `
 - Chạy: `hungjury decide --questions @questions.json --workspace ../some-repo --hint "…"` — tích hợp CI bằng exit code (`2` = treo → bắt buộc người review).
 - **Đo được**: jurors chia phiếu trên breaking/risk → cả 4 case qua judge; rulings ghi `q:pr.*` (key treo ở trust 0.4 provisional), fact về repo ở `ws:<repo>`.
 
-### `log-triage` — triage log CI/production
+### [`log-triage`](examples/log-triage) — triage log CI/production
 
 - **State**: text log đỏ; **câu hỏi**: `noul` flaky/actionable, `score` severity.
 - Policy phân biệt "infra noise → retry" vs "lỗi thật → dev fix" — hai thứ thường bị model lẫn.
 - Chạy per-failure trong CI: `hungjury decide --state-file failure.log --questions @questions.json`, hoặc pipe thẳng `--state-file -`.
 - **Đo được**: 8/8 log fixtures đúng hết (100%) — flaky vs actionable không lẫn.
 
-### `spam-filter` — phân loại mail
+### [`spam-filter`](examples/spam-filter) — phân loại mail
 
 - **State**: raw email (headers + body); **câu hỏi**: `choice` verdict (ham/promo/phishing/scam), `noul` credential_risk, `score` spam_score.
 - Policy dạy precedence: kiểm tra marker phishing/scam **trước** promo/ham — urgency + generic greeting + link lạ = phishing kể cả khi mạo danh brand thật.
 - **Đo được**: 35/36 = 97% — kể cả adversarial (zip kèm password → phishing; wire fee → scam chứ không phải credential risk). Miss duy nhất: mail rỗng — jury over-abstain trên `spam_score` (đáng lẽ 0 vì không có spam signal nào).
 
-### `support-routing` — điều phối queue
+### [`support-routing`](examples/support-routing) — điều phối queue
 
 - **State**: ticket text; **câu hỏi**: `choice` queue (legal/manager/billing/sales/technical theo precedence), `score` priority, `noul` vip.
 - **Đo được**: 30/36 = 83%, `queue` 12/12. Ba miss đều là **label vượt quá rubric** ("not urgent" → priority 0 là defensible; manager-escalation ≠ critical) — lặp lại đúng bài học cũ: jury lệch expected thì xem lại policy/labels trước.
 
-### `content-moderation` — kiểm duyệt UGC
+### [`content-moderation`](examples/content-moderation) — kiểm duyệt UGC
 
 - **State**: user content; **câu hỏi**: `choice` action (allow/warn/remove/escalate_human), `score` severity, `noul` illegal_or_safety.
 - **Đo được**: 26/30 = 87%, severity 10/10. 3 `action` hung đều là **borderline thật** — "kill yourself" là remove hay escalate phụ thuộc credible-threat, jury chia đúng chỗ policy mơ hồ → escalate=queue đưa case đó cho người, đúng thiết kế.
 
-### `email-classification` — inbox triage (all-devin jury)
+### [`email-classification`](examples/email-classification) — inbox triage (all-devin jury)
 
 - **State**: raw email; **câu hỏi**: `choice` folder (work/personal/promotions/updates/spam), `noul` action_required (request trong spam *không* tính), `score` priority.
 - Jury đơn-backend: `devin:swe-2-medium` + `devin:gpt-5-6-luna-low` + `devin:gemini-3-8-flash-low` — chứng minh chỉ cần **một CLI**, diversity đến từ model khác nhau.
