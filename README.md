@@ -83,24 +83,32 @@ Tóm tắt — bảng đầy đủ và cách reproduce ở
 - **`batch --pack 12`** (12 emails, all-devin jury): **9.2s / 3 calls**
   vs 33s / 36 calls không pack — accuracy ngang nhau (92–94% qua 2 runs,
   evidence: `examples/email-classification/results-pack12.jsonl`).
-- **Memory đa domain** (~60 case × 7 use case): jury ensemble ≥ judge đơn
-  trên 5/7 domain; memory giúp khi rulings của judge khớp policy, hại khi
-  judge lệch policy (−17pts — fix bằng `--policy-file` cho judge).
+- **Memory đa domain** (~60 case × 7 use case): jury ensemble thắng judge
+  đơn trên 4/7 domain (`jury_memory` đạt ngang judge ở `multilingual` →
+  4 wins + 1 meet); memory giúp khi rulings của judge khớp policy, hại
+  khi judge lệch policy (−13.3pts worst-case / −11.1 mean — còn +17pts
+  là *judge gain* khi chạy với `--policy-file`).
 
 ## Use cases thực tế
 
 Bảy kịch bản runnable trong `examples/` — mỗi cái là một project
 `.hungjury/` tự chứa (config + policy + memory riêng):
 
-| Example | State | Câu hỏi | Đo được |
+| Example | State | Câu hỏi | Accuracy per-question † |
 |---|---|---|---|
-| [`support-triage`](examples/support-triage) | ticket text | choice dept + score frustration + noul urgent | 93% |
+| [`support-triage`](examples/support-triage) | ticket text | choice dept + score frustration + noul urgent | 93% *(unverified)* |
 | [`pr-review`](examples/pr-review) | **workspace** (repo) | noul review/breaking + score risk | agent tự đọc diff; rulings ghi `ws:` scope |
-| [`log-triage`](examples/log-triage) | log CI/production | noul flaky/actionable + score severity | 100% |
-| [`spam-filter`](examples/spam-filter) | raw email | choice verdict + noul credential_risk + score | 97% |
-| [`support-routing`](examples/support-routing) | ticket text | choice queue + score priority + noul vip | 83% (misses = label vượt rubric) |
-| [`content-moderation`](examples/content-moderation) | user content | choice action + score severity + noul safety | 87% (hung đúng chỗ borderline) |
-| [`email-classification`](examples/email-classification) | raw email | choice folder + noul action + score priority | 94%, jury all-devin |
+| [`log-triage`](examples/log-triage) | log CI/production | noul flaky/actionable + score severity | 100% *(unverified)* |
+| [`spam-filter`](examples/spam-filter) | raw email | choice verdict + noul credential_risk + score | 97% *(unverified)* |
+| [`support-routing`](examples/support-routing) | ticket text | choice queue + score priority + noul vip | 83% *(unverified)* (misses = label vượt rubric) |
+| [`content-moderation`](examples/content-moderation) | user content | choice action + score severity + noul safety | 87% *(unverified)* (hung đúng chỗ borderline) |
+| [`email-classification`](examples/email-classification) | raw email | choice folder + noul action + score priority | 94% *(unverified)*, jury all-devin |
+
+† Accuracy đếm **per-question** (mỗi case 3 keys — vd 36 keys / 12 case),
+không phải per-case; Wilson CI @n≈30–36 ≈ **±10pts**. *(unverified)* =
+không có `results.jsonl` commit trong repo — chỉ run `--pack 12` của
+email-classification có artefact (`results-pack12.jsonl`, rescore
+33/36 = 92%). Audit chi tiết: [docs/REPORT-2026-09-21.md](docs/REPORT-2026-09-21.md).
 
 Chi tiết chạy từng use case + phân tích misses: [examples/README.md](examples/README.md).
 

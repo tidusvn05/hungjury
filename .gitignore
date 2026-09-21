@@ -1,4 +1,9 @@
 /target
-# per-domain benchmark runtime state (memory db, cache, call logs)
-bench/*/home*/
+# per-domain benchmark runtime state (cache, state.json) — trừ evidence
+# audit giữ lại: calls.jsonl + memory.db + memory-summary.txt
+# (xem docs/REPORT-2026-09-21.md)
+bench/*/home*/*
+!bench/*/home*/calls.jsonl
+!bench/*/home*/memory.db
+!bench/*/home*/memory-summary.txt
 __pycache__/

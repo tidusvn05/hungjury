@@ -3,6 +3,13 @@
 Mỗi thư mục con là một project `.hungjury/` tự chứa: config, `policy.md`,
 memory.db riêng — memory của các use case không bao giờ lẫn nhau.
 
+> **Cách đọc accuracy:** đếm **per-question** (mỗi case 3 keys — vd
+> 36 keys / 12 case), không phải per-case; Wilson CI @n≈30–36 ≈ **±10pts**.
+> Các số đánh dấu *(unverified)* không có `results.jsonl` commit trong
+> repo — chỉ run `--pack 12` của email-classification có artefact
+> (`results-pack12.jsonl`, rescore 33/36 = 92%). Audit:
+> [../docs/REPORT-2026-09-21.md](../docs/REPORT-2026-09-21.md).
+
 ## support-triage — phân luồng ticket hàng loạt
 
 ```bash
@@ -16,7 +23,8 @@ hungjury memory decisions --last 20              # ai quyết, hung nào
 courtesy-urgency trap, và một case cố tình mơ hồ). `score.py` so từng
 key: `"hung"` trong expected = đúng khi key đó nằm trong `hung`.
 
-**Kết quả đo được (claude:haiku + codex + devin):** 56/60 = 93%; 1 case
+**Kết quả đo được (claude:haiku + codex + devin):** 56/60 = 93%
+*(per-question; unverified — không artefact commit)*; 1 case
 hung → `queue_pending` (t19 "chargeback today" — jurors chia 2:1 vì nó
 vừa là deadline vừa là hăm dọa: đúng chỗ policy cần con người).
 
@@ -124,7 +132,8 @@ juror tự mở diff. `escalate=sync`: mọi case đều qua judge vì jurors ch
 phiếu trên `breaking`/`risk`; rulings lưu theo `q:pr.*` + fact theo
 `ws:<repo>` (key treo được ghi `trust=0.4` provisional như thiết kế).
 
-**Kết quả:** 9/12 theo expected labels — nhưng 2 "miss" là judge áp
+**Kết quả:** 9/12 *(per-question; unverified — không artefact commit)*
+theo expected labels — nhưng 2 "miss" là judge áp
 policy *chính xác hơn* labels: `068b7ad` có schema migration →
 `breaking=true` đúng theo policy, label tay của tôi sai. Bài học: khi
 judge lệch expected, xem lại policy trước khi xem lại judge.
@@ -139,7 +148,8 @@ python3 ../score.py cases.jsonl results.jsonl
 tail -50 build.log | hungjury decide --state-file - --questions @questions.json
 ```
 
-**Kết quả:** 24/24 = 100% — flaky vs actionable phân biệt đúng hết
+**Kết quả:** 24/24 = 100% *(per-question; unverified — không artefact
+commit)* — flaky vs actionable phân biệt đúng hết
 (timeout/OOM/503 → retry; assert/compile/migration → dev fix).
 
 ## spam-filter — phân loại mail
@@ -155,7 +165,8 @@ precedence "check phishing/scam markers trước"), `credential_risk`
 noul (ask credentials/card/OTP — wire fee là scam, *không* tính),
 `spam_score` score 0–2.
 
-**Kết quả:** 35/36 = 97%. Adversarial đúng hết: password-zip invoice
+**Kết quả:** 35/36 = 97% *(per-question; unverified — không artefact
+commit)*. Adversarial đúng hết: password-zip invoice
 → phishing; "won $1M, wire $50 fee" → scam + credential_risk=false.
 Miss: mail `"?"` — jury abstain cả `spam_score` dù "không có spam
 signal → 0" là defensible default (over-abstention trên score/noul
@@ -173,7 +184,8 @@ Câu hỏi: `queue` choice với precedence legal>manager>billing>sales>
 technical (multi-intent tickets), `priority` score 0–2, `vip` noul
 (chỉ enterprise signals rõ ràng — "I'm a paying customer" không tính).
 
-**Kết quả:** 30/36 = 83%; `queue` **12/12** (kể cả legal>billing
+**Kết quả:** 30/36 = 83% *(per-question; unverified — không artefact
+commit)*; `queue` **12/12** (kể cả legal>billing
 precedence và "bug or plan limit?" → sales). Misses là bài học labels:
 r1 "not urgent" refund → priority 0 defensible (label 1 quá tay); r5
 manager-escalation → 1 (rubric: critical = outage/legal — label 2
@@ -192,7 +204,8 @@ Câu hỏi: `action` choice (allow/warn/remove/escalate_human theo
 precedence illegal/safety > remove > warn > allow), `severity`
 score 0–2, `illegal_or_safety` noul.
 
-**Kết quả:** 26/30 = 87%; `severity` 10/10. Ba `action` hung đều là
+**Kết quả:** 26/30 = 87% *(per-question; unverified — không artefact
+commit)*; `severity` 10/10. Ba `action` hung đều là
 borderline *thật*: m3 "kill yourself" (remove vs escalate tuỳ
 credible-threat), m2 profanity+refund, m10 "dumb take lol" — jury chia
 đúng chỗ policy mơ hồ, escalate=queue đưa về cho người. Đó là hành vi
@@ -218,7 +231,8 @@ Jury đơn-backend — `devin:swe-2-medium` (free) + `devin:gpt-5-6-luna-low`
 miễn jurors là các model khác nhau: disagreement signal vẫn đến từ
 diversity. Judge `devin:claude-opus-5-high`, `escalate=queue`.
 
-**Kết quả:** 34/36 = 94% trong ~33s (≈2.8s/case, 3 juror song song);
+**Kết quả:** 34/36 = 94% *(per-question; unverified — không artefact
+commit)* trong ~33s (≈2.8s/case, 3 juror song song);
 `folder` **12/12** — kể cả mail quảng cáo tiếng Việt → promotions,
 phishing mạo danh IT → spam + action_required=false, colleague forward
 mail khuyến mãi → work (message tới mình là personal), mail `"?"` →
@@ -235,7 +249,8 @@ hungjury batch cases.jsonl --out results-pack12.jsonl --pack 12
 
 `results-pack12.jsonl` (committed) là bằng chứng: 12 case quyết bởi
 **3 calls** thay vì 36 — check `.hungjury/calls.jsonl` sau khi chạy sẽ
-thấy đúng 3 dòng. Hai run đo được **92–94%** trong ~9s (vs ~33s không
+thấy đúng 3 dòng. Rescore file commit = 33/36 = **92%** *(verified)*;
+hai run đo được **92–94%** trong ~9s (vs ~33s không
 pack) — run-to-run variance ±1 key, misses vẫn là e11 (mail `"?"` →
 abstain đúng pattern) và e12 boundary; per-item hung hoạt động đúng:
 e11 hung trong pack trong khi 11 items lân cận quyết bình thường.

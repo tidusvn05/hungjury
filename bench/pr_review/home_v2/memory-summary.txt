@@ -1,0 +1,25 @@
+memory.db summary — bench/pr_review/home_v2
+generated: 2026-09-21 · source: sqlite3 dump (audit evidence — docs/REPORT-2026-09-21.md)
+
+== entries by kind/status ==
+kind       | status    | count | trust_range
+precedent | active | 4 | 0.80..0.80
+ruling | active | 12 | 0.80..0.80
+
+== entries by scope ==
+scope | count
+q:pr.needs_senior | 7
+q:pr.risk | 5
+q:pr.subsystem | 4
+
+== contested rows ==
+id | kind | scope | trust | text
+(none)
+
+== other tables ==
+decisions | 30
+queue | 0
+juror_stats | 9
+
+== calls.jsonl ==
+334 lines

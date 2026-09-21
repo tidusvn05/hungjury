@@ -1,0 +1,26 @@
+memory.db summary — bench/adversarial/home_v2
+generated: 2026-09-21 · source: sqlite3 dump (audit evidence — docs/REPORT-2026-09-21.md)
+
+== entries by kind/status ==
+kind       | status    | count | trust_range
+precedent | active | 3 | 0.80..0.80
+ruling | active | 12 | 0.80..0.80
+ruling | contested | 1 | 0.80..0.80
+
+== entries by scope ==
+scope | count
+q:support.department | 9
+q:support.frustration | 4
+q:support.is_urgent | 3
+
+== contested rows ==
+id | kind | scope | trust | text
+ad7429ce1e413e937813aac3eac608aa8e56c87bd2972157de82894482dca241 | ruling | q:support.frustration | 0.80 | How frustrated the customer appears A stated deadline or blocking impact signals urgency, not emotion. Score frustration
+
+== other tables ==
+decisions | 30
+queue | 0
+juror_stats | 9
+
+== calls.jsonl ==
+333 lines

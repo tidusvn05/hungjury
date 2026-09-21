@@ -113,11 +113,14 @@ that arm.
 
 ### Findings
 
-1. **The jury ensemble meets or beats a lone strong judge on 5 of 7
-   domains.** The eval's `judge` arm answers every question alone (no
-   ballots, no memory); three cheap ballots aggregated is a strong
-   baseline. `go` only fires where a real jury→judge gap exists
-   (`support`, `email_intent`, `multilingual`).
+1. **The jury ensemble beats a lone strong judge on 4 of 7 domains**
+   (`pr_review`, `log_triage`, `adversarial`, `workspace`; `multilingual`
+   is a *meet* and only via `jury_memory` — 4 wins + 1 meet). The eval's
+   `judge` arm answers every question alone (no ballots, no memory);
+   three cheap ballots aggregated is a strong baseline. `go` only fires
+   where a real jury→judge gap exists — it actually passed on `support`
+   and `multilingual` only; `email_intent` closed 33% of the gap (< 50%
+   threshold) so `go.pass=false` there despite the gap.
 
 2. **Memory helps exactly where the judge's rulings agree with the task
    policy.** `support` +78% of gap, `multilingual` +100% of gap — judge
@@ -132,7 +135,8 @@ that arm.
    interpretation — when the judge is wrong relative to ground truth,
    memory is faithfully wrong.
 
-4. **Hung rate ~0% everywhere** (1 question total, workspace mem arm).
+4. **Hung rate ~0% everywhere** (3 questions total — 3/90 on the
+   workspace `jury_memory` arm, `hung_rate` .033).
    With 3 ballots and confidence ≥ 0.5, a 2–1 split always decides; a
    hang needs a 1-1-1 split or ballot failures. The adversarial set
    produced disagreement but not hangs, so `hung_rate_drop` remains
