@@ -93,6 +93,13 @@ chiếm gần hết); trong batch, throughput ≈ `max_concurrency` ÷ latency
 `[limits] max_concurrency` (chú ý rate-limit của từng CLI), hoặc bật
 cache/memory để case lặp về ~0s.
 
+**`batch` vs `decide` lặp (đo trực tiếp, `devin:swe-2-medium`, 10 case):**
+80.8s khi gọi `decide` tuần tự vs 14.2s với `batch` — **~5.7× nhanh hơn**
+vì batch song song hoá cross-case qua `max_concurrency`, còn vòng lặp
+`decide` trả full latency mỗi lần. Quy tắc: xử lý N>1 case thì luôn dùng
+`batch`; SDK cũng có `decide` song song ở phía caller nhưng batch còn rẻ
+hơn nhờ chia sẻ config/memory handle.
+
 Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHMARK.md), dataset + report trong [`bench/`](bench/).
 
 ## Cách dùng dự kiến

@@ -259,3 +259,23 @@ juror and judge prompts — two seeds (42, 7):
   (`summarize.py`) before reading small deltas.
 - `judge` (cold) answers blind — kept for historical comparability;
   `judge_informed` is the fairer ceiling.
+
+---
+
+# Appendix — backend throughput spike (2026-09-20)
+
+Setup: 1 juror per run, `--min-quorum 1 --escalate off --no-cache
+--no-memory`, adversarial cases (3 questions/case, one call answers all),
+`max_concurrency=6` (default).
+
+| Juror | single decide | batch@10 | batch@20 | batch@50 | ≈/case @50 |
+|---|---|---|---|---|---|
+| `devin:swe-2-medium` | 5.3s | 12.4s | 21.5s | 49.5s | ~1.0s |
+| `codex:gpt-5.6-terra@low` | 7.2s | 17.5s | 36.6s | 74.5s | ~1.5s |
+| `claude:haiku` | 8.8s | 48.7s | 63.4s | 115.1s | ~2.3s |
+
+**`batch` vs sequential `decide`** (devin, 10 cases, direct measurement):
+80.8s sequential vs 14.2s batch — **~5.7× faster**, matching
+`throughput ≈ max_concurrency ÷ latency`. Always `batch` for N>1;
+raise `[limits] max_concurrency` for more (mind per-CLI rate limits);
+enable cache/memory to collapse repeat cases to ~0s.
