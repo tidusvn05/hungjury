@@ -80,9 +80,9 @@ Tóm tắt — bảng đầy đủ và cách reproduce ở
   (90–92%) → mặc định `codex:gpt-5.6-terra@low`; tier cao dành cho judge.
 - **Throughput:** `devin:swe-2-medium` nhanh nhất (~1.0s/case @batch50,
   `max_concurrency=6`); `batch` nhanh hơn `decide` tuần tự ~5.7×.
-- **`batch --pack 12`** (12 emails, all-devin jury): 94% accuracy trong
-  **9.2s / 3 calls** vs 33s / 36 calls khi không pack — cùng accuracy,
-  12× ít calls.
+- **`batch --pack 12`** (12 emails, all-devin jury): **9.2s / 3 calls**
+  vs 33s / 36 calls không pack — accuracy ngang nhau (92–94% qua 2 runs,
+  evidence: `examples/email-classification/results-pack12.jsonl`).
 - **Memory đa domain** (~60 case × 7 use case): jury ensemble ≥ judge đơn
   trên 5/7 domain; memory giúp khi rulings của judge khớp policy, hại khi
   judge lệch policy (−17pts — fix bằng `--policy-file` cho judge).

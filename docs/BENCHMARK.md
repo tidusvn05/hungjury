@@ -332,7 +332,7 @@ Direct measurements:
 | Comparison | Result |
 |---|---|
 | `decide` ×10 sequential vs `batch` (devin, 10 cases) | 80.8s vs 14.2s — **~5.7× faster** |
-| `batch` vs `batch --pack 12` (all-devin jury, 12 emails) | ~33s/36 calls vs **9.2s/3 calls** — same 94% accuracy |
+| `batch` vs `batch --pack 12` (all-devin jury, 12 emails) | ~33s/36 calls vs **9.2s/3 calls** — accuracy on par (94% vs 92–94% across two runs; evidence committed at `examples/email-classification/results-pack12.jsonl`) |
 
 Rule: always `batch` for N>1; add `--pack N` when the per-item states
 are short (each item's text lands in one shared prompt — keep N small,

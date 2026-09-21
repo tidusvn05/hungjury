@@ -228,9 +228,17 @@ mơ hồ; e11 `priority` trên mail rỗng — pattern over-abstention trên
 score cho empty content đã biết.
 
 **Packed mode** (`batch --pack 12` — mỗi juror một call cho cả 12 mail):
-cùng 34/36 = 94% nhưng chỉ **9.2s và 3 calls** (vs 33s/36 calls).
-Per-item hung vẫn hoạt động: e11 hung đúng trong khi 11 items khác
-quyết bình thường.
+
+```bash
+hungjury batch cases.jsonl --out results-pack12.jsonl --pack 12
+```
+
+`results-pack12.jsonl` (committed) là bằng chứng: 12 case quyết bởi
+**3 calls** thay vì 36 — check `.hungjury/calls.jsonl` sau khi chạy sẽ
+thấy đúng 3 dòng. Hai run đo được **92–94%** trong ~9s (vs ~33s không
+pack) — run-to-run variance ±1 key, misses vẫn là e11 (mail `"?"` →
+abstain đúng pattern) và e12 boundary; per-item hung hoạt động đúng:
+e11 hung trong pack trong khi 11 items lân cận quyết bình thường.
 
 ## Bài học từ spike
 
