@@ -66,12 +66,13 @@ that has `.github/workflows/release.yml` and force-push the tag (ask first).
 - `src/` — CLI (`main.rs` dispatch), jury/`agent` backends, `judge.rs`,
   `memory/` (SQLite store + FTS5), `eval.rs`, `learn.rs`, `lint.rs`,
   `doctor.rs`, `batch.rs`, `config.rs`, `project_dir.rs`
-- `examples/` — six self-contained `.hungjury/` projects with rubrics +
+- `examples/` — seven self-contained `.hungjury/` projects with rubrics +
   labeled `cases.jsonl` + `score.py`
 - `bench/` — 7-domain generators + adversarial 64-case set + `run_bench.sh`
 - `sdk/python`, `sdk/typescript` — thin wrappers over the binary
-- `docs/PLAN.md` — phase plan; `docs/REPORT-*.md` — dated reports;
-  `docs/BENCHMARK.md` — benchmark methodology
+- `docs/USAGE.md` — full usage guide; `docs/DESIGN.md` — architecture;
+  `docs/PLAN.md` — phase plan; `docs/REPORT-*.md` — dated reports;
+  `docs/BENCHMARK.md` — benchmarks incl. throughput/pack appendix
 - `CHANGELOG.md` — release notes source (keepachangelog)
 
 ## Eval notes

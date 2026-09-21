@@ -262,7 +262,42 @@ juror and judge prompts — two seeds (42, 7):
 
 ---
 
-# Appendix — backend throughput spike (2026-09-20)
+# Appendix — microbenchmarks (2026-09-19/20)
+
+## Single-call latency floor
+
+Small classification prompt, schema-enforced, three CLIs run in
+parallel (2026-09-19):
+
+| Juror | Wall-clock |
+|---|---|
+| `devin -p` (default model) | 6.1s |
+| `claude -p --model haiku`, tools off + minimal system prompt | 6.3s |
+| `claude -p --model haiku`, default | 7.4s |
+| `codex exec`, `gpt-5.6-sol` effort low | 8.6s |
+
+In parallel the wait equals the slowest juror. Memory can't lower this
+floor; it helps speed by **reducing escalations to the strong tier** and
+**reducing repo-exploration time**.
+
+## Juror model selection — codex tiers (2026-09-20)
+
+20-case support-triage, single juror, `--escalate off --no-cache
+--no-memory`:
+
+| Model `@low` | Wall (20 cases) | Accuracy | department | is_urgent | frustration |
+|---|---|---|---|---|---|
+| `gpt-5.6-terra` | 30.8s | 90% | 20/20 | 19/20 | 15/20 |
+| `gpt-5.6-luna` | 31.3s | 90% | 19/20 | 19/20 | 16/20 |
+| `gpt-5.6-sol` | 28.6s | 92% | 20/20 | 19/20 | 16/20 |
+
+The three models are within noise of each other (sol ahead by exactly 1
+key); misses cluster on `frustration` boundary labels — label noise, not
+a model gap. Default juror is `codex:gpt-5.6-terra@low`; the high tier
+(`gpt-5.6-sol@high`, `claude:opus@high`) is reserved for the **judge**,
+where headroom pays because the judge decides the hard/hung cases.
+
+## Backend throughput
 
 Setup: 1 juror per run, `--min-quorum 1 --escalate off --no-cache
 --no-memory`, adversarial cases (3 questions/case, one call answers all),
@@ -274,8 +309,34 @@ Setup: 1 juror per run, `--min-quorum 1 --escalate off --no-cache
 | `codex:gpt-5.6-terra@low` | 7.2s | 17.5s | 36.6s | 74.5s | ~1.5s |
 | `claude:haiku` | 8.8s | 48.7s | 63.4s | 115.1s | ~2.3s |
 
-**`batch` vs sequential `decide`** (devin, 10 cases, direct measurement):
-80.8s sequential vs 14.2s batch — **~5.7× faster**, matching
-`throughput ≈ max_concurrency ÷ latency`. Always `batch` for N>1;
-raise `[limits] max_concurrency` for more (mind per-CLI rate limits);
-enable cache/memory to collapse repeat cases to ~0s.
+Reading: a single call costs ~5–9s regardless of backend (CLI spawn +
+roundtrip dominate); in batch, throughput ≈ `max_concurrency` ÷ latency.
+`devin:swe-2-medium` is both the fastest and free. Faster still: raise
+`[limits] max_concurrency` (mind per-CLI rate limits), or enable
+cache/memory to collapse repeat cases to ~0s.
+
+## Execution modes — concurrent vs packed
+
+`batch` has three execution modes worth distinguishing:
+
+- **single** (`decide`): one case, one call per juror.
+- **concurrent** (`batch`, default `--pack 1`): N cases → N calls per
+  juror, parallelized up to `max_concurrency`.
+- **packed** (`batch --pack N`): N same-questions cases share **one**
+  call per juror; the juror returns per-item ballots
+  `{"<item-id>": {answers}}`. Vote/quorum/hung/escalation still computed
+  per item — only ballot *collection* is packed.
+
+Direct measurements:
+
+| Comparison | Result |
+|---|---|
+| `decide` ×10 sequential vs `batch` (devin, 10 cases) | 80.8s vs 14.2s — **~5.7× faster** |
+| `batch` vs `batch --pack 12` (all-devin jury, 12 emails) | ~33s/36 calls vs **9.2s/3 calls** — same 94% accuracy |
+
+Rule: always `batch` for N>1; add `--pack N` when the per-item states
+are short (each item's text lands in one shared prompt — keep N small,
+4–12, for long states). Packed and unpacked results never share cache
+entries (pack size is in the key); workspace states are rejected under
+`--pack`. Per-item hung detection is preserved — in the email spike the
+empty `"?"` mail hung inside the pack while its 11 neighbours decided.

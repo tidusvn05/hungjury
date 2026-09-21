@@ -2,7 +2,7 @@
 
 > Quyết định có kiểu (typed decisions) từ một "bồi thẩm đoàn" gồm các agent CLI chạy headless — có trí nhớ án lệ.
 
-**Trạng thái:** bản thiết kế — chưa có code. Kế hoạch triển khai chi tiết: [docs/PLAN.md](docs/PLAN.md).
+**Trạng thái:** [v0.1.0 đã release](https://github.com/tidusvn05/hungjury/releases) — binaries cho linux/macos/windows. Kế hoạch triển khai: [docs/PLAN.md](docs/PLAN.md).
 
 ## Ý tưởng
 
@@ -35,7 +35,7 @@ Lấy cảm hứng từ [Jev của TypeSafe AI](https://typesafe.ai/blog/introdu
 
 ### Mất gì
 
-- **Tốc độ:** sàn đo được là **~6–9 giây** cho một lần gọi agent CLI với prompt nhỏ (xem bảng dưới), so với 70–500ms của Jev. Chỉ hợp với batch, CI, triage và workflow bất đồng bộ — không hợp real-time.
+- **Tốc độ:** sàn đo được là **~5–9 giây** cho một lần gọi agent CLI, so với 70–500ms của Jev. Chỉ hợp với batch, CI, triage và workflow bất đồng bộ — không hợp real-time.
 - **Logprobs:** CLI không trả về xác suất của token, nên không có phân phối xác suất thật từ model.
 - **Đảm bảo kiểu dữ liệu:** chỉ làm được "validate theo schema + retry + báo lỗi có kiểu", không có đảm bảo toán học như Jev tuyên bố.
 
@@ -48,373 +48,84 @@ Lấy cảm hứng từ [Jev của TypeSafe AI](https://typesafe.ai/blog/introdu
 
 > **Lưu ý điều khoản dịch vụ:** dùng gói thuê bao để tự động hóa cho cá nhân thì được; đừng xây dịch vụ bán cho người khác trên nền gói thuê bao.
 
-### Số đo thực tế (2026-09-19)
-
-Prompt phân loại nhỏ, có schema, ba CLI chạy song song:
-
-| Juror | Wall-clock |
-|---|---|
-| `devin -p` (model mặc định) | 6.1s |
-| `claude -p --model haiku`, tắt tools + system prompt tối giản | 6.3s |
-| `claude -p --model haiku`, mặc định | 7.4s |
-| `codex exec`, `gpt-5.6-sol` effort low | 8.6s |
-
-Chạy song song thì thời gian chờ bằng juror chậm nhất. Memory không hạ được sàn này; nó giúp tốc độ bằng cách **giảm số lần phải leo thang lên model cao** và **giảm thời gian agent điều tra repo**.
-
-**Chọn model cho juror (spike 2026-09-20):** 20 case support-triage,
-juror đơn, `--escalate off --no-cache --no-memory`:
-
-| Model `@low` | Wall (20 case) | Accuracy | department | is_urgent | frustration |
-|---|---|---|---|---|---|
-| `gpt-5.6-terra` | 30.8s | 90% | 20/20 | 19/20 | 15/20 |
-| `gpt-5.6-luna` | 31.3s | 90% | 19/20 | 19/20 | 16/20 |
-| `gpt-5.6-sol` | 28.6s | 92% | 20/20 | 19/20 | 16/20 |
-
-Ba model ngang nhau trong nhiễu (sol hơn đúng 1 key); misses tập trung
-ở boundary `frustration` — noise của label, không phải model gap.
-Vì vậy mặc định là `codex:gpt-5.6-terra@low` cho juror; tier cao
-(`gpt-5.6-sol@high`, `claude:opus@high`) dành cho **judge** — nơi
-headroom đáng giá vì judge quyết các case khó/hung.
-
-**Throughput theo backend (spike 2026-09-20):** 1 juror mỗi run,
-`--min-quorum 1 --escalate off --no-cache --no-memory`, 50 case
-adversarial (3 câu hỏi/case, 1 call trả hết), `max_concurrency=6`
-mặc định:
-
-| Juror | Đơn (1 case) | batch@10 | batch@20 | batch@50 | ≈/case @50 |
-|---|---|---|---|---|---|
-| `devin:swe-2-medium` | 5.3s | 12.4s | 21.5s | 49.5s | ~1.0s |
-| `codex:gpt-5.6-terra@low` | 7.2s | 17.5s | 36.6s | 74.5s | ~1.5s |
-| `claude:haiku` | 8.8s | 48.7s | 63.4s | 115.1s | ~2.3s |
-
-Đọc bảng: single-call trả ~5–9s bất kể backend (CLI spawn + roundtrip
-chiếm gần hết); trong batch, throughput ≈ `max_concurrency` ÷ latency
-— `devin:swe-2-medium` vừa nhanh nhất vừa free. Muốn nhanh hơn: tăng
-`[limits] max_concurrency` (chú ý rate-limit của từng CLI), hoặc bật
-cache/memory để case lặp về ~0s.
-
-**`batch` vs `decide` lặp (đo trực tiếp, `devin:swe-2-medium`, 10 case):**
-80.8s khi gọi `decide` tuần tự vs 14.2s với `batch` — **~5.7× nhanh hơn**
-vì batch song song hoá cross-case qua `max_concurrency`, còn vòng lặp
-`decide` trả full latency mỗi lần. Quy tắc: xử lý N>1 case thì luôn dùng
-`batch`; SDK cũng có `decide` song song ở phía caller nhưng batch còn rẻ
-hơn nhờ chia sẻ config/memory handle.
-
-**`batch --pack N` — prompt batching** (12 emails, all-devin jury, đo
-trực tiếp): gom N case vào **một** call mỗi juror, juror trả ballot
-per-item `{"<id>": {answers}}`. Vote/quorum/hung/escalation vẫn tính
-per-item — chỉ phần thu ballot được gom.
-
-| Mode | Calls (3 jurors) | Wall | Accuracy |
-|---|---|---|---|
-| `batch` (pack=1, concurrent) | 36 | ~33s | 34/36 = 94% |
-| `batch --pack 12` | 3 | **9.2s** | 34/36 = **94%** |
-
-Cùng accuracy, ~3.6× nhanh, 12× ít calls — misses giống nhau (e11 mail
-rỗng → abstain đúng pattern đã biết). Spike trước đó với prompt tay cho
-kết quả tương tự (94% ở pack@4 lẫn pack@12). Trade-off: items chia sẻ
-context nên case cực đoan có thể ảnh hưởng lẫn nhau (chưa thấy trên
-dataset này), và prompt phình theo N — với state dài, giữ pack nhỏ
-(4–10). Cache key gồm pack size nên kết quả packed/unpacked không lẫn.
-
-Benchmark đa domain (~60 case/use case × 7): [`docs/BENCHMARK.md`](docs/BENCHMARK.md), dataset + report trong [`bench/`](bench/).
-
-## Cách dùng dự kiến
-
-### Chạy nhanh (không cần thư mục)
-
-`hungjury` chạy được ở bất kỳ đâu — state gửi qua stdin/file, mọi dữ
-liệu nằm trong thư mục global `~/.local/share/hungjury` (hoặc
-`$HUNGJURY_HOME`):
+## Cách dùng nhanh
 
 ```bash
+# Quyết một case
 hungjury decide --questions @questions.json --state-file ticket.txt
-```
+# → JSON: answers (typed + probabilities + confidence), hung, sources
 
-### Dùng trong project — `.hungjury/`
-
-Với một project thật, tạo thư mục `.hungjury/` (giống `.git`) để giữ
-config, policy và memory **riêng cho project đó**:
-
-```bash
+# Trong project: .hungjury/ giữ config + policy + memory riêng (giống .git)
 cd my-project && hungjury init
-# → .hungjury/config.toml  (skeleton, mọi thứ đã comment sẵn)
-# → .hungjury/policy.md    (rubric của bạn — tự động inject vào prompt)
-# → .hungjury/.gitignore   (memory.db, cache/, calls.jsonl, state.json)
-```
 
-Từ đó mọi lệnh `hungjury` chạy **ở bất kỳ subdir nào** của project đều
-walk-up tìm `.hungjury/` gần nhất — memory.db, cache, quota đều local,
-không lẫn với project khác. `hungjury doctor` cho thấy root được chọn.
-
-Quy tắc precedence: `--memory-db` > `$HUNGJURY_HOME` > `.hungjury/` >
-global. `hungjury.toml` ở ancestor cũng được walk-up nhưng chỉ nạp
-config — không di chuyển memory (backward compatible).
-
-### Tách memory theo mục đích
-
-Hai cấp độ:
-
-```toml
-# .hungjury/config.toml
-namespace = "triage"            # mềm: scopes thành triage:q:<qid>,
-                               # tách trong cùng một db
-
-[profiles.review]               # cứng: db riêng hoàn toàn
-jurors    = ["codex:gpt-5.6-terra@low"]
-memory_db = "memory-review.db"  # resolve theo .hungjury/
-policy_file = "policy-review.md"
-```
-
-`memory stats` liệt kê breakdown theo namespace.
-
-`questions.json`:
-
-```json
-{
-  "department": {
-    "type": "choice",
-    "id": "support.department",
-    "instructions": "Which team should handle this",
-    "criteria": {
-      "billing": "Payment or subscription issues",
-      "technical": "Bugs or integration problems",
-      "sales": "Pricing or account questions"
-    }
-  },
-  "frustration": {
-    "type": "score",
-    "instructions": "How frustrated the customer appears",
-    "criteria": ["Calm, just stating facts", "Frustrated but civil", "Very angry, strong language"]
-  },
-  "is_urgent": {"type": "noul", "instructions": "The message conveys urgency or time-sensitivity"}
-}
-```
-
-Kết quả (stdout, rút gọn):
-
-```json
-{
-  "id": "dec_01J…",
-  "decided_by": "jury",
-  "answers": {
-    "department":  {"type": "choice", "choice": "technical",
-                    "probabilities": {"billing": 0.0, "technical": 1.0, "sales": 0.0}, "confidence": 1.0},
-    "frustration": {"type": "score", "score": 1.33, "legend": "Frustrated but civil", "confidence": 0.53},
-    "is_urgent":   {"type": "noul", "noul": 1.0, "confidence": 1.0}
-  },
-  "hung": [],
-  "sources": {"department": "jury", "frustration": "jury", "is_urgent": "judge"},
-  "memory": {"rulings": 2, "precedents": 1, "facts": 0},
-  "usage": {"wall_ms": 7421, "jurors": [{"juror": "claude:haiku", "status": "ok", "ms": 6300}]}
-}
-```
-
-`state` cũng có thể là một workspace để agent tự khám phá (chỉ đọc):
-
-```bash
-hungjury decide --questions @pr-questions.json --workspace ./my-repo --hint "Xem diff của nhánh hiện tại so với main"
-```
-
-**Exit code:** `0` = có quyết định, `2` = jury treo chưa được xử (dùng được ngay trong shell/CI để chuyển cho người), `1` = lỗi.
-
-Các lệnh khác: `hungjury feedback` (người sửa đáp án), `hungjury learn` (model cao chấm lại ngoài luồng), `hungjury eval` (đo accuracy/latency theo từng cấu hình), `hungjury memory search|show|forget|export|import|merge`, `hungjury doctor`.
-
-### Vận hành hằng ngày
-
-```bash
-# Chạy nhiều case một lần (song song theo limits.max_concurrency)
+# Nhiều case: song song theo limits.max_concurrency
 hungjury batch cases.jsonl --out results.jsonl
 
-# Gắn rubric/policy của domain vào cả juror lẫn judge (đổi policy ⇒ cache tự invalidate)
-hungjury --policy-file triage-policy.md decide req.json
-
-# Kiểm tra memory và lịch sử quyết định
-hungjury memory list --kind ruling --all          # mọi status, kể cả contested
-hungjury memory decisions --last 20               # quyết định gần nhất + ai quyết
-hungjury memory stats                             # entries, nguồn, quota, juror stats
-hungjury memory resolve <entry-id> --accept       # contested → active (--reject → forgotten)
-
-# Học ngoài luồng: judge chấm lại các quyết định gần nhất thay vì chỉ hàng hung
-hungjury learn --audit --recent 20
-hungjury feedback <decision-id> --set dept=technical --note "label sai"
-
-# Soi rubric trước khi chạy (miễn phí, không tốn call)
-hungjury lint questions.json        # cảnh báo: level trừu tượng, boundary một chiều, criteria chồng lấn
-
-# Đo trên dữ liệu thật — nhiều seed một lệnh, memory db tạm (không đụng db thật)
-hungjury eval cases.jsonl --seeds 3 --label triage --audit-train 8
+# Hoặc gom N case vào MỘT call mỗi juror (prompt batching) —
+# vote/hung/escalation vẫn per-item, calls giảm ~N lần
+hungjury batch cases.jsonl --out results.jsonl --pack 10
 ```
 
-Khi người hoặc audit phủ định một quyết định jury đã *decided* (không hung), các ruling/precedent do judge ghi cho câu hỏi đó bị đánh `contested` — vẫn xem được bằng `memory list --all` / `memory review`, không còn được inject vào prompt. Đây là guard chống memory lan truyền lỗi của judge (xem `docs/BENCHMARK.md`).
+Exit code `0` decided / `2` hung (route cho người) / `1` lỗi. Hướng dẫn
+đầy đủ — profiles, namespace, memory, feedback/learn/eval, chi phí, SDK
+Python/TypeScript: **[docs/USAGE.md](docs/USAGE.md)**.
 
-### Tin cậy & vòng đời rulings
+## Số đo thực tế
 
-- **`min_quorum`** (mặc định 2): câu hỏi có ít hơn quorum ballot hợp lệ (juror timeout/lỗi/abstain) được coi là *hung* — một juror sống sót duy nhất không được âm thầm quyết định.
-- **Score bimodal hung**: confidence của score = `min(1 − normalized_stddev, bucket_support)` — share phiếu chọn đúng level được báo. Phiếu {0, 2, 2} trên thang 0–2 báo legend "1" không ai chọn → support 0 → hung, thay vì mean 1.33 âm thầm quyết.
-- **Provisional rulings**: ruling mà judge rút ra từ một câu jury *không quyết được* (hung/quorum) ghi với `trust = memory.provisional_trust` (mặc định 0.4, thấp hơn judge thường 0.8). Nó chỉ được nâng lên full trust khi `feedback` hoặc `learn --audit` sau đó *tái xác nhận* verdict của judge trên scope đó.
-- **`supersedes`**: rulings trong prompt judge có gắn `[id:…]`; judge có thể retire ruling cũ khi viết ruling mới (`"supersedes": "<id-prefix>"`).
-- **`memory.ruling_ttl_days`** (mặc định 0 = tắt): rulings `active` quá N ngày tự thành `stale` mỗi lần `learn` chạy.
-- **`memory review`** liệt kê contested entries chờ duyệt; `memory resolve <id> --accept|--reject` để xử lý.
+Tóm tắt — bảng đầy đủ và cách reproduce ở
+[docs/BENCHMARK.md](docs/BENCHMARK.md):
 
-### Chi phí
-
-`[costs]` trong config map backend → USD/call; response `usage.est_cost_usd` và eval `est_cost_usd` ước tính theo số call thật (gồm retry):
-
-```toml
-[costs]
-claude = 0.08
-codex = 0.05
-devin  = 0.05
-```
-
-### SDK Python
-
-`sdk/python/hungjury.py` — wrapper mỏng không dependency, gọi binary qua stdin:
-
-```python
-from hungjury import system_one, feedback
-
-d = system_one(
-    "I was charged twice, refund please — this blocks payroll.",
-    {"dept": {"type": "choice", "id": "support.dept",
-              "instructions": "which team",
-              "criteria": {"billing": "payment/refund", "technical": "bugs"}},
-     "urgent": {"type": "noul", "id": "support.urgent",
-                "instructions": "time-sensitive"}},
-)
-if not d.ok:            # exit_code == 2 → hung, route to a human
-    route_to_human(d)
-print(d.answers)        # {"dept": {"choice": "billing", ...}, ...}
-feedback(d.id, {"dept": "billing"}, note="correct")
-```
-
-TypeScript: `sdk/typescript/` — zero-dep Node wrapper cùng hình dạng (`decide`/`systemOne`/`feedback`, `cwd` cho project discovery).
+- **Latency sàn** ~5–9s/call bất kể backend (CLI spawn + roundtrip).
+- **Chọn model juror:** `terra`/`luna`/`sol` ngang nhau trong nhiễu
+  (90–92%) → mặc định `codex:gpt-5.6-terra@low`; tier cao dành cho judge.
+- **Throughput:** `devin:swe-2-medium` nhanh nhất (~1.0s/case @batch50,
+  `max_concurrency=6`); `batch` nhanh hơn `decide` tuần tự ~5.7×.
+- **`batch --pack 12`** (12 emails, all-devin jury): 94% accuracy trong
+  **9.2s / 3 calls** vs 33s / 36 calls khi không pack — cùng accuracy,
+  12× ít calls.
+- **Memory đa domain** (~60 case × 7 use case): jury ensemble ≥ judge đơn
+  trên 5/7 domain; memory giúp khi rulings của judge khớp policy, hại khi
+  judge lệch policy (−17pts — fix bằng `--policy-file` cho judge).
 
 ## Use cases thực tế
 
-Bảy kịch bản runnable trong `examples/` — mỗi cái là một project `.hungjury/` tự chứa (config + policy + memory riêng, không lẫn nhau):
+Bảy kịch bản runnable trong `examples/` — mỗi cái là một project
+`.hungjury/` tự chứa (config + policy + memory riêng):
 
-### [`support-triage`](examples/support-triage) — phân luồng ticket
+| Example | State | Câu hỏi | Đo được |
+|---|---|---|---|
+| [`support-triage`](examples/support-triage) | ticket text | choice dept + score frustration + noul urgent | 93% |
+| [`pr-review`](examples/pr-review) | **workspace** (repo) | noul review/breaking + score risk | agent tự đọc diff; rulings ghi `ws:` scope |
+| [`log-triage`](examples/log-triage) | log CI/production | noul flaky/actionable + score severity | 100% |
+| [`spam-filter`](examples/spam-filter) | raw email | choice verdict + noul credential_risk + score | 97% |
+| [`support-routing`](examples/support-routing) | ticket text | choice queue + score priority + noul vip | 83% (misses = label vượt rubric) |
+| [`content-moderation`](examples/content-moderation) | user content | choice action + score severity + noul safety | 87% (hung đúng chỗ borderline) |
+| [`email-classification`](examples/email-classification) | raw email | choice folder + noul action + score priority | 94%, jury all-devin |
 
-- **State**: text ticket; **câu hỏi**: `choice` (department), `score` (frustration), `noul` (is_urgent).
-- **Policy** đóng vai trò quyết định: "request đầu tiên là primary", "ASAP lịch sự không tính urgent". Không có nó, mỗi juror tự vẽ ranh giới → hung nhiều.
-- **`escalate=queue`**: ticket treo vào hàng — người duyệt sau bằng `memory decisions` + `feedback`, hoặc `learn --audit --recent`.
-- Chạy: `hungjury batch cases.jsonl --out results.jsonl` → 1 JSONL với `case`/`answers`/`decided_by`/`exit` — join được về ticket gốc.
-- **Đo được**: 93% theo expected labels viết tay (56/60 keys); case hung duy nhất là tranh chấp thật giữa hai luật policy → đúng chỗ cần con người.
-
-### [`pr-review`](examples/pr-review) — cổng review trước merge
-
-- **State**: workspace (repo thật); juror được công cụ đọc-code, tự khám phá theo `hint` ("xem diff nhánh này so với main").
-- **Câu hỏi**: `noul` needs_review/breaking, `score` risk.
-- **`escalate=sync`**: PR khó phán → judge mạnh quyết ngay trong luồng, rulings lưu thành án lệ theo `ws:<repo>` scope — repo này càng review càng có context.
-- Chạy: `hungjury decide --questions @questions.json --workspace ../some-repo --hint "…"` — tích hợp CI bằng exit code (`2` = treo → bắt buộc người review).
-- **Đo được**: jurors chia phiếu trên breaking/risk → cả 4 case qua judge; rulings ghi `q:pr.*` (key treo ở trust 0.4 provisional), fact về repo ở `ws:<repo>`.
-
-### [`log-triage`](examples/log-triage) — triage log CI/production
-
-- **State**: text log đỏ; **câu hỏi**: `noul` flaky/actionable, `score` severity.
-- Policy phân biệt "infra noise → retry" vs "lỗi thật → dev fix" — hai thứ thường bị model lẫn.
-- Chạy per-failure trong CI: `hungjury decide --state-file failure.log --questions @questions.json`, hoặc pipe thẳng `--state-file -`.
-- **Đo được**: 8/8 log fixtures đúng hết (100%) — flaky vs actionable không lẫn.
-
-### [`spam-filter`](examples/spam-filter) — phân loại mail
-
-- **State**: raw email (headers + body); **câu hỏi**: `choice` verdict (ham/promo/phishing/scam), `noul` credential_risk, `score` spam_score.
-- Policy dạy precedence: kiểm tra marker phishing/scam **trước** promo/ham — urgency + generic greeting + link lạ = phishing kể cả khi mạo danh brand thật.
-- **Đo được**: 35/36 = 97% — kể cả adversarial (zip kèm password → phishing; wire fee → scam chứ không phải credential risk). Miss duy nhất: mail rỗng — jury over-abstain trên `spam_score` (đáng lẽ 0 vì không có spam signal nào).
-
-### [`support-routing`](examples/support-routing) — điều phối queue
-
-- **State**: ticket text; **câu hỏi**: `choice` queue (legal/manager/billing/sales/technical theo precedence), `score` priority, `noul` vip.
-- **Đo được**: 30/36 = 83%, `queue` 12/12. Ba miss đều là **label vượt quá rubric** ("not urgent" → priority 0 là defensible; manager-escalation ≠ critical) — lặp lại đúng bài học cũ: jury lệch expected thì xem lại policy/labels trước.
-
-### [`content-moderation`](examples/content-moderation) — kiểm duyệt UGC
-
-- **State**: user content; **câu hỏi**: `choice` action (allow/warn/remove/escalate_human), `score` severity, `noul` illegal_or_safety.
-- **Đo được**: 26/30 = 87%, severity 10/10. 3 `action` hung đều là **borderline thật** — "kill yourself" là remove hay escalate phụ thuộc credible-threat, jury chia đúng chỗ policy mơ hồ → escalate=queue đưa case đó cho người, đúng thiết kế.
-
-### [`email-classification`](examples/email-classification) — inbox triage (all-devin jury)
-
-- **State**: raw email; **câu hỏi**: `choice` folder (work/personal/promotions/updates/spam), `noul` action_required (request trong spam *không* tính), `score` priority.
-- Jury đơn-backend: `devin:swe-2-medium` + `devin:gpt-5-6-luna-low` + `devin:gemini-3-8-flash-low` — chứng minh chỉ cần **một CLI**, diversity đến từ model khác nhau.
-- **Đo được**: 34/36 = 94% (~2.8s/case), `folder` 12/12 kể cả mail tiếng Việt và forward-boundary. Hai miss đều là hung defensible trên boundary mơ hồ thật.
+Chi tiết chạy từng use case + phân tích misses: [examples/README.md](examples/README.md).
 
 ### Khi nào nên/không nên dùng
 
 Nên dùng khi câu trả lời **mơ hồ nhưng có rubric**, cần tín hiệu xác suất (confidence/probabilities) và hung là output hợp lệ — triage, gate, enrich. Không dùng cho câu hỏi khách quan chắc chắn (regex/parse được thì code thẳng rẻ hơn) hoặc khi mỗi quyết định sai đều không chấp nhận được mà không có người duyệt.
 
-**Cách chọn tách biệt**: một project, một mục đích → `.hungjury/` + `namespace`; một project nhiều mục đích → `[profiles.X]` với `memory_db` riêng. Luôn viết `policy.md` trước khi bật escalate — benchmark (`docs/BENCHMARK.md`) cho thấy judge lệch policy gây −17pts.
-
-**Bài học thiết kế câu hỏi từ spike** (`examples/README.md` có chi tiết): hung bắt *bất đồng giữa jurors*, còn *thiếu thông tin* cần `"abstain"` — ticket "hello?? anyone there" từng bị 3 juror đồng loạt đoán `technical` conf=1.0; với abstain trong schema, cả 3 từ chối → câu hỏi treo đúng nghĩa.
-
-## Thiết kế
-
-### 1. Adapter cho từng CLI
-
-Ba backend: **claude**, **codex**, **devin**; model viết dạng `<backend>:<model>[@<effort>]`, ví dụ `codex:gpt-5.6-terra@low`. Lớp backend tái sử dụng từ project [agentwiki](https://github.com/tidusvn05/agentwiki).
-
-- Chạy CLI như subprocess headless; loại bỏ mọi env API key để không vô tình chuyển sang billing API.
-- Ép output theo JSON schema sinh từ `questions`: claude dùng `--json-schema`, codex dùng `--output-schema` (cả hai đã chạy thử); devin không có flag schema nên ép bằng prompt.
-- Luôn validate lại. Sai schema → retry có giới hạn kèm phản hồi lỗi → hết lượt thì juror đó bị loại khỏi phiếu. Không bao giờ trả dữ liệu sai kiểu.
-
-### 2. Xác suất đến từ bỏ phiếu, không phải tự khai
-
-- **Không** để model tự khai xác suất — con số đó calibrate kém.
-- Chạy nhiều juror và/hoặc nhiều sample; **tỉ lệ phiếu là phân phối xác suất**.
-- **Mức bất đồng là confidence:** `choice` = chênh lệch giữa hai lựa chọn đầu; `score` = 1 − độ lệch chuẩn đã chuẩn hoá; `noul` = |2p − 1|. Một phiếu duy nhất thì `confidence = null`.
-- Jury "treo" khi confidence dưới ngưỡng (mặc định 0.5; với 3 juror, 2–1 là treo).
-
-### 3. Hai tầng model và trí nhớ án lệ
+## Thiết kế tóm tắt
 
 ```
-decide → cache → tra memory (Rust, <10ms) → juror cấp THẤP chạy song song → bỏ phiếu
-                                                       │
-                                     jury treo? ── có ─┴→ judge cấp CAO phán
-                                                            → ghi ruling / precedent / fact vào memory
+decide → cache → tra memory (Rust, <10ms) → juror cấp THẤP song song → bỏ phiếu
+                                                    │
+                                  jury treo? ── có ─┴→ judge cấp CAO phán
+                                                         → ghi ruling / precedent / fact
 ```
 
-Mấu chốt: `state` mỗi lần một khác, nhưng `questions` nằm cố định trong code người gọi. Vì vậy kiến thức được **gắn vào câu hỏi**, không gắn vào state:
+- Xác suất đến từ **bỏ phiếu**, không phải model tự khai.
+- Kiến thức gắn vào **câu hỏi** (ruling/precedent) hoặc **workspace**
+  (fact kèm evidence hash); jury cấp thấp không bao giờ tự ghi memory.
+- Memory là SQLite/FTS5 local, export/import/merge bằng file;
+  contested entries không ghi đè âm thầm.
+- `state` text → agent không tool; `state` workspace → chỉ tool đọc;
+  env API key bị loại khỏi subprocess.
 
-| Loại | Gắn vào | Nội dung |
-|---|---|---|
-| **ruling** | câu hỏi | Quy tắc diễn giải tổng quát do model cao chưng cất, vd "lỗi tích hợp → technical; chỉ billing khi nói về tiền bị trừ" |
-| **precedent** | câu hỏi + state tương tự | Án lệ: trích đoạn state + phán quyết + lý do, dùng làm few-shot |
-| **fact** | workspace | Hiểu biết về một repo kèm hash file bằng chứng; tự hết hiệu lực khi file đổi |
-
-- **Jury cấp thấp không bao giờ tự ghi memory** — chỉ judge và con người, để model thấp không tự củng cố lỗi của mình.
-- Memory được tra và chèn vào prompt *trước khi* spawn agent; không cho agent tự tra bằng tool (mỗi lượt tool tốn thêm vài giây).
-- `hungjury learn` cho model cao chấm lại ca treo và một mẫu quyết định cũ **ngoài luồng**, rồi gộp án lệ thành số ít ruling để prompt luôn ngắn.
-- Phán quyết của judge và của người là ground truth ⇒ suy ra được độ chính xác từng juror ⇒ trọng số phiếu.
-- Nếu mỗi lần bạn hỏi một câu hỏi ad-hoc khác nhau thì memory gần như vô dụng (chỉ còn `fact` giúp được). Lệnh `hungjury eval` tồn tại để đo điều này trên dữ liệu của chính bạn.
-
-### 4. Memory: lưu local, chia sẻ bằng file
-
-- Một file SQLite (FTS5) trong thư mục dữ liệu người dùng. Không có server, không đồng bộ qua mạng.
-- Id của entry là hash nội dung, dữ liệu append-only ⇒ **merge là phép hợp tập**, import nhiều lần không trùng.
-- `export` ra bundle JSONL (diff được trong git). **Mặc định chỉ xuất ruling và fact**; án lệ chứa trích đoạn state nên phải thêm `--include-cases`.
-- `import`/`merge`: entry nhập về có mức tin cậy thấp hơn entry cục bộ; án lệ mâu thuẫn bị đánh dấu `contested` và chờ judge phân xử, không ghi đè âm thầm.
-
-### 5. Gộp câu hỏi
-
-Dồn mọi câu hỏi vào **một prompt** cho mỗi juror. Chi phí khởi động agent lớn, nên hỏi thừa vài câu mang tính suy đoán (speculative fan-out) rẻ hơn nhiều so với gọi thêm lần nữa.
-
-### 6. An toàn và vận hành
-
-- `state` là dữ liệu không tin cậy (prompt injection). State dạng text: agent **không có tool nào**. State dạng workspace: **chỉ tool đọc**. Không bao giờ bypass permission.
-- Output bị ép kiểu (enum / số nguyên / boolean) nên injection tối đa chỉ lật được quyết định, không rò được dữ liệu. Lưu ý: sandbox `read-only` của codex vẫn đọc được toàn bộ filesystem.
-- Memory làm giảm tính độc lập giữa các juror (cùng đọc một án lệ ⇒ dễ đồng thuận giả). Response luôn ghi entry nào đã được dùng; có tuỳ chọn giữ một juror "mù" không xem memory để đối chứng.
-- Timeout cho mỗi juror; juror quá hạn bị loại khỏi phiếu và được ghi lại trong `usage`.
-- Cache theo hash của `state` + `questions` + cấu hình jury + phiên bản memory liên quan.
-- Hạn mức số lần gọi mỗi ngày + log `calls.jsonl`.
-
-### 7. Pattern sử dụng
-
-- **Speculative fan-out:** hỏi nhiều câu trong một call, code quyết định câu nào liên quan.
-- **Confidence-gated routing:** exit code `2` / `hung` ⇒ chuyển cho người hoặc quy trình kỹ hơn.
-- **Composite scoring:** gộp nhiều `score`/`noul` thành một điểm chung.
-- **Intent routing:** `choice` phân loại ý định rồi chuyển tới handler phù hợp.
-- **Dạy một lần, dùng mãi:** `hungjury feedback` sửa một quyết định sai ⇒ thành án lệ có độ tin cậy cao nhất.
+Chi tiết đầy đủ: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Quyết định còn mở
 
@@ -424,3 +135,14 @@ Dồn mọi câu hỏi vào **một prompt** cho mỗi juror. Chi phí khởi đ
 - [ ] Tách lớp backend dùng chung với agentwiki thành crate riêng (sau khi API ổn định).
 
 Các mục mở trước đây (ngôn ngữ, flag headless, công thức confidence, trọng số juror) đã chốt — xem bảng ở [docs/PLAN.md §9](docs/PLAN.md).
+
+## Tài liệu
+
+| File | Nội dung |
+|---|---|
+| [docs/USAGE.md](docs/USAGE.md) | Cách dùng đầy đủ: init, profiles, memory, daily ops, SDK |
+| [docs/DESIGN.md](docs/DESIGN.md) | Kiến trúc: adapters, voting, memory, an toàn |
+| [docs/BENCHMARK.md](docs/BENCHMARK.md) | Benchmark đa domain + microbenchmarks (latency, throughput, pack) |
+| [docs/PLAN.md](docs/PLAN.md) | Kế hoạch phases và các quyết định đã chốt |
+| [examples/README.md](examples/README.md) | Hướng dẫn chạy 7 use case + bài học từ spike |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes (keepachangelog) |
