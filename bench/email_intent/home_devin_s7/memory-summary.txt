@@ -1,0 +1,23 @@
+memory.db summary — bench/email_intent/home_devin_s7
+generated: 2026-09-22 · source: sqlite3 dump (audit evidence — eval throwaway db snapshot)
+
+== entries by kind/status ==
+kind       | status    | count | trust_range
+precedent | active | 1 | 0.80..0.80
+ruling | active | 1 | 0.40..0.40
+
+== entries by scope ==
+scope | count
+q:msg.respond_today | 2
+
+== contested rows ==
+id | kind | scope | trust | text
+(none)
+
+== other tables ==
+decisions | 30
+queue | 0
+juror_stats | 6
+
+== calls.jsonl ==
+421 lines

@@ -1,0 +1,3 @@
+{"ts":"2026-09-21T14:57:36.446788763Z","agent":"juror:devin:swe-2-medium#0","backend":"devin","model":"swe-2-medium","prompt_chars":12274,"secs":7.15280814,"status":"ok"}
+{"ts":"2026-09-21T14:57:41.266603489Z","agent":"juror:devin:swe-2-medium#2","backend":"devin","model":"swe-2-medium","prompt_chars":12274,"secs":11.970820515,"status":"ok"}
+{"ts":"2026-09-21T14:57:46.860968192Z","agent":"juror:devin:swe-2-medium#1","backend":"devin","model":"swe-2-medium","prompt_chars":12274,"secs":17.566164217,"status":"ok"}

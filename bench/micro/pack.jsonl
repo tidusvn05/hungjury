@@ -1,0 +1,4 @@
+{"bench":"pack","variant":"decide-seq","backend":"devin","model":"swe-2-medium","n_cases":10,"pack_size":0,"samples":1,"wall_ms":62551,"calls":10,"exit":1,"timestamp":"2026-09-21T14:56:29Z","git_rev":"3711f87"}
+{"bench":"pack","variant":"batch","backend":"devin","model":"swe-2-medium","n_cases":10,"pack_size":0,"samples":1,"wall_ms":15297,"calls":10,"exit":0,"timestamp":"2026-09-21T14:56:44Z","git_rev":"3711f87"}
+{"bench":"pack","variant":"batch","backend":"devin","model":"swe-2-medium","n_cases":12,"pack_size":0,"samples":3,"wall_ms":44407,"calls":36,"exit":0,"timestamp":"2026-09-21T14:57:29Z","git_rev":"3711f87"}
+{"bench":"pack","variant":"pack","backend":"devin","model":"swe-2-medium","n_cases":12,"pack_size":12,"samples":3,"wall_ms":17587,"calls":3,"exit":0,"timestamp":"2026-09-21T14:57:46Z","git_rev":"3711f87"}

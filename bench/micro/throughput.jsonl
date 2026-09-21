@@ -1,0 +1,4 @@
+{"bench":"throughput","variant":"decide","backend":"devin","model":"swe-2-medium","n_cases":1,"pack_size":0,"samples":1,"wall_ms":6473,"calls":1,"exit":2,"timestamp":"2026-09-21T14:55:33Z","git_rev":"3711f87"}
+{"bench":"throughput","variant":"batch@10","backend":"devin","model":"swe-2-medium","n_cases":10,"pack_size":0,"samples":1,"wall_ms":17868,"calls":10,"exit":0,"timestamp":"2026-09-21T14:55:51Z","git_rev":"3711f87"}
+{"bench":"throughput","variant":"batch@20","backend":"devin","model":"swe-2-medium","n_cases":20,"pack_size":0,"samples":1,"wall_ms":28403,"calls":20,"exit":0,"timestamp":"2026-09-21T14:56:19Z","git_rev":"3711f87"}
+{"bench":"throughput","variant":"batch@50","backend":"devin","model":"swe-2-medium","n_cases":50,"pack_size":0,"samples":1,"wall_ms":62843,"calls":50,"exit":0,"timestamp":"2026-09-21T14:57:22Z","git_rev":"3711f87"}

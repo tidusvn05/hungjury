@@ -344,3 +344,62 @@ are short (each item's text lands in one shared prompt — keep N small,
 entries (pack size is in the key); workspace states are rejected under
 `--pack`. Per-item hung detection is preserved — in the email spike the
 empty `"?"` mail hung inside the pack while its 11 neighbours decided.
+
+## Rerun 2026-09-21 — devin-only jury
+
+Re-run of the microbenchmarks and the `email_intent` eval with **devin as
+the only backend** (jury `devin:swe-2-medium` + `devin:swe-2-high`, 2
+samples/juror; judge `devin:swe-2-high`; `min_quorum 2`, `hung_threshold
+0.5`, `escalate Sync`). This is a *different jury configuration* than the
+mixed-backend runs above — the numbers below must not be mixed into those
+tables. Raw data: `bench/micro/{latency,throughput,pack}.jsonl`,
+`bench/email_intent/report_devin_s{42,7,11}.json`.
+
+### Microbench (single sample each — noisy)
+
+| Bench | Variant | Wall |
+|---|---|---|
+| latency | `decide`, `swe-2-medium` | 6.7s |
+| latency | `decide`, `swe-2-high` | 6.5s |
+| throughput | `decide` (`swe-2-medium`) | 6.5s |
+| throughput | `batch@10` | 17.9s |
+| throughput | `batch@20` | 28.4s |
+| throughput | `batch@50` | 62.8s (~1.26s/case) |
+| pack | `decide` ×10 sequential | 62.6s (1 hung `department` key, exit 1) |
+| pack | `batch` (10 cases) | 15.3s — **~4.1× faster** than sequential |
+| pack | `batch`, samples=3 (12 cases) | 44.4s / 36 calls |
+| pack | `batch --pack 12`, samples=3 | 17.6s / 3 calls — **~2.5× less wall** |
+
+`--pack 12` cut juror calls 36→3 and wall ~2.5× on the 3-sample run —
+consistent with the earlier spike, on a different backend config.
+
+### `email_intent`, 3 seeds (42 / 7 / 11)
+
+Accuracy on the 30-case test arm, mean ± sample sd across seeds:
+
+| arm | s42 | s7 | s11 | mean±sd |
+|---|---|---|---|---|
+| jury | 94.4% | 91.1% | 96.7% | **94.1±2.8%** |
+| jury + memory | 94.4% | 87.8% | 95.6% | 92.6±4.2% |
+| judge (cold) | 93.3% | 88.9% | 92.2% | 91.5±2.3% |
+| judge_informed | 94.4% | 88.9% | 96.7% | 93.3±4.0% |
+
+- **Jury > judge on every seed** — the direction *reversed* vs the
+  original mixed-backend run (jury 93% < judge 97%). With a devin-only
+  jury the ensemble's two ballots per juror beat the lone judge call;
+  treat as a config-specific result, not a correction to the table above.
+- `hung_rate` 0% on all arms and seeds. `train_escalations`: seed 7 only
+  (1/30 → `rulings_written=1`); seeds 42 and 11 had none.
+- `jury_memory` dipped only on seed 7 (87.8%, −3.3 pts vs jury) — the one
+  seed where a judge ruling was actually written; consistent with the
+  poisoning pattern, though n=1 ruling is far from conclusive.
+
+### Caveats
+
+- Microbench rows are **single samples** (`samples=1`) — expect ±20–30%
+  noise; use them for orders of magnitude and pack-vs-batch ratios only.
+- The seed-42 `memory.db` under `bench/email_intent/home_devin_s42/` is a
+  re-run snapshot, not the original artefact.
+- The eval ran with a throwaway memory DB per seed (eval semantics since
+  `f2047ce`); committed `home_devin_*` dirs keep `calls.jsonl` +
+  `memory.db` + `memory-summary.txt` for audit only.

@@ -1,0 +1,2 @@
+{"bench":"latency","variant":"decide","backend":"devin","model":"swe-2-high","n_cases":1,"pack_size":0,"samples":1,"wall_ms":6540,"calls":1,"exit":0,"timestamp":"2026-09-21T14:55:18Z","git_rev":"3711f87"}
+{"bench":"latency","variant":"decide","backend":"devin","model":"swe-2-medium","n_cases":1,"pack_size":0,"samples":1,"wall_ms":6698,"calls":1,"exit":0,"timestamp":"2026-09-21T14:55:18Z","git_rev":"3711f87"}

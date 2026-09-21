@@ -1,0 +1,404 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.8888888888888888,
+      "calls": 30,
+      "calls_by_backend": {
+        "devin": 30
+      },
+      "correct": 80,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 0,
+      "mismatches": [
+        {
+          "case": 0,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 1,
+          "expected": 1,
+          "got": 2,
+          "key": "sentiment"
+        },
+        {
+          "case": 11,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 15,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 21,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 22,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 24,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        }
+      ],
+      "per_key": {
+        "intent": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "respond_today": {
+          "accuracy": 0.7,
+          "correct": 21,
+          "decided": 30
+        },
+        "sentiment": {
+          "accuracy": 0.9666666666666667,
+          "correct": 29,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 14276.966666666667,
+      "wall_ms_p95": 21454
+    },
+    "judge_informed": {
+      "accuracy": 0.8888888888888888,
+      "calls": 30,
+      "calls_by_backend": {
+        "devin": 30
+      },
+      "correct": 80,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 56,
+      "mismatches": [
+        {
+          "case": 0,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 6,
+          "expected": 1,
+          "got": 0,
+          "key": "sentiment"
+        },
+        {
+          "case": 11,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 15,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 21,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 22,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 24,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        }
+      ],
+      "per_key": {
+        "intent": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "respond_today": {
+          "accuracy": 0.7,
+          "correct": 21,
+          "decided": 30
+        },
+        "sentiment": {
+          "accuracy": 0.9666666666666667,
+          "correct": 29,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 14921.933333333332,
+      "wall_ms_p95": 23434
+    },
+    "jury": {
+      "accuracy": 0.9111111111111111,
+      "calls": 120,
+      "calls_by_backend": {
+        "devin": 120
+      },
+      "correct": 82,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 0,
+      "mismatches": [
+        {
+          "case": 0,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 11,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 15,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 21,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 22,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        }
+      ],
+      "per_key": {
+        "intent": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "respond_today": {
+          "accuracy": 0.7333333333333333,
+          "correct": 22,
+          "decided": 30
+        },
+        "sentiment": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 30083.366666666665,
+      "wall_ms_p95": 38525
+    },
+    "jury_memory": {
+      "accuracy": 0.8777777777777778,
+      "calls": 120,
+      "calls_by_backend": {
+        "devin": 120
+      },
+      "correct": 79,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 56,
+      "mismatches": [
+        {
+          "case": 0,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 1,
+          "expected": 1,
+          "got": 2,
+          "key": "sentiment"
+        },
+        {
+          "case": 6,
+          "expected": 1,
+          "got": 0,
+          "key": "sentiment"
+        },
+        {
+          "case": 11,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 15,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 16,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 19,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 21,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 22,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 24,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "respond_today"
+        }
+      ],
+      "per_key": {
+        "intent": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "respond_today": {
+          "accuracy": 0.7,
+          "correct": 21,
+          "decided": 30
+        },
+        "sentiment": {
+          "accuracy": 0.9333333333333333,
+          "correct": 28,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 30331.1,
+      "wall_ms_p95": 40049
+    }
+  },
+  "cases": 60,
+  "config": {
+    "escalate": "Sync",
+    "hung_threshold": 0.5,
+    "judge": "devin:swe-2-high",
+    "jurors": [
+      "devin:swe-2-medium",
+      "devin:swe-2-high"
+    ],
+    "min_quorum": 2,
+    "samples": 2
+  },
+  "contested_written": 0,
+  "go": {
+    "accuracy_gap_jury_to_judge": -0.022222222222222254,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "memory_delta_vs_jury": -0.033333333333333326,
+    "pass": false
+  },
+  "label": "email_intent",
+  "rulings_written": 1,
+  "seed": 7,
+  "test": 30,
+  "train": 30,
+  "train_escalations": 1
+}
