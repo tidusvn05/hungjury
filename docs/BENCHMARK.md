@@ -347,13 +347,13 @@ empty `"?"` mail hung inside the pack while its 11 neighbours decided.
 
 ## Rerun 2026-09-21 — devin-only jury
 
-Re-run of the microbenchmarks and the `email_intent` eval with **devin as
+Re-run of the microbenchmarks and four eval domains with **devin as
 the only backend** (jury `devin:swe-2-medium` + `devin:swe-2-high`, 2
 samples/juror; judge `devin:swe-2-high`; `min_quorum 2`, `hung_threshold
 0.5`, `escalate Sync`). This is a *different jury configuration* than the
 mixed-backend runs above — the numbers below must not be mixed into those
 tables. Raw data: `bench/micro/{latency,throughput,pack}.jsonl`,
-`bench/email_intent/report_devin_s{42,7,11}.json`.
+`bench/{email_intent,log_triage,multilingual,workspace}/report_devin_s{42,7,11}.json`.
 
 ### Microbench (single sample each — noisy)
 
@@ -394,6 +394,62 @@ Accuracy on the 30-case test arm, mean ± sample sd across seeds:
   seed where a judge ruling was actually written; consistent with the
   poisoning pattern, though n=1 ruling is far from conclusive.
 
+The remaining three domains follow the same format. The `orig` column
+repeats the original seed-42 mixed-backend row from the results table
+above — *different jury/judge config, not directly comparable*.
+
+### `log_triage`, 3 seeds (42 / 7 / 11)
+
+| arm | s42 | s7 | s11 | mean±sd | orig |
+|---|---|---|---|---|---|
+| jury | 84.4% | 83.3% | 84.4% | 84.1±0.6% | 87% |
+| jury + memory | 90.0% | 88.9% | 85.6% | 88.1±2.3% | 87% |
+| judge (cold) | 87.8% | 91.1% | 86.7% | **88.5±2.3%** | 80% |
+| judge_informed | 84.4% | 85.6% | 85.6% | 85.2±0.6% | — |
+
+- Direction *flipped* vs the original run: jury 84.1 < judge 88.5 here
+  (was jury 87 > judge 80). `jury_memory` closed most of that gap —
+  `go.pass` on s42 and s7 (gap closed 167% / 71%); s11 landed at 49.99…%
+  — one question short of the ≥50% threshold.
+- `hung_rate` 0% everywhere; train escalations 3/3/2 → 7/8/6 rulings,
+  0 contested.
+
+### `multilingual`, 3 seeds (42 / 7 / 11)
+
+| arm | s42 | s7 | s11 | mean±sd | orig |
+|---|---|---|---|---|---|
+| jury | 87.8% | 86.7% | 85.6% | **86.7±1.1%** | 88% |
+| jury + memory | 86.7% | 82.2% | 86.7% | 85.2±2.6% | 93% |
+| judge (cold) | 86.7% | 83.3% | 84.4% | 84.8±1.7% | 93% |
+| judge_informed | 86.7% | 87.8% | 85.6% | **86.7±1.1%** | — |
+
+- Jury ≥ judge on every seed (86.7 vs 84.8 mean) — no gap to close, so
+  `jury_memory` had nothing to fix (85.2, within noise of jury). Train
+  escalations 0/1/0 → 0/2/0 rulings: near-empty memory.
+- The original headline does not reproduce: memory/judge 93% parity was
+  a mixed-backend result; under devin-only the judge sits ~2 pts below
+  the jury and memory adds nothing.
+
+### `workspace`, 3 seeds (42 / 7 / 11)
+
+| arm | s42 | s7 | s11 | mean±sd | orig |
+|---|---|---|---|---|---|
+| jury | 87.8% | 88.9% | 82.2% | **86.3±3.6%** | 87% |
+| jury + memory | 86.7% | 86.2% | 76.7% | 83.2±5.6% | 87% |
+| judge (cold) | 86.4%* | 89.3%* | 81.3%* | 85.7±4.0% | 38% |
+| judge_informed | 88.5%* | 88.9%* | 81.3%* | 86.2±4.2% | — |
+
+\* judge arms have `unscored` questions (judge output parse failures):
+judge 9/15/15 and judge_informed 12/9/15 of 90 on s42/s7/s11 — accuracy
+is over decided only (75–81 denominators).
+
+- The judge's 38% collapse did **not** reproduce: `swe-2-high` explored
+  the repos well enough (85.7±4.0 cold, 86.2±4.2 informed) — jury ≈
+  judge, no gap for memory to close.
+- s11 is rate-limit damaged (see caveats): its `jury_memory` 76.7%
+  drags the arm mean to 83.2; s42+s7 alone average 86.4%.
+- The rerun's only non-zero `hung_rate`: `jury_memory` s7, 3/90 (3.3%).
+
 ### Caveats
 
 - Microbench rows are **single samples** (`samples=1`) — expect ±20–30%
@@ -403,3 +459,11 @@ Accuracy on the 30-case test arm, mean ± sample sd across seeds:
 - The eval ran with a throwaway memory DB per seed (eval semantics since
   `f2047ce`); committed `home_devin_*` dirs keep `calls.jsonl` +
   `memory.db` + `memory-summary.txt` for audit only.
+- `workspace` s11 hit devin free-tier rate limits during the *train*
+  phase: 75 `error` calls in `home_devin_s11/calls.jsonl` (all inside
+  the first ~150 calls) and only 14/30 train decisions landed in its
+  `memory.db` (16 failed) — `jury_memory` s11 is degraded and drags the
+  domain mean. s42/s7 have zero `error` calls.
+- `workspace` judge arms have `unscored` items (parse failures on
+  repo-reading answers): judge 9/15/15 and judge_informed 12/9/15 of 90
+  questions on s42/s7/s11 — accuracy is over decided only.

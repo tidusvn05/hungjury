@@ -1,0 +1,446 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.9111111111111111,
+      "calls": 30,
+      "calls_by_backend": {
+        "devin": 30
+      },
+      "correct": 82,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 0,
+      "mismatches": [
+        {
+          "case": 7,
+          "expected": 2,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 15,
+          "expected": 0,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 18,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 23,
+          "expected": 1,
+          "got": 2,
+          "key": "severity"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 27,
+          "expected": false,
+          "got": true,
+          "key": "user_facing"
+        },
+        {
+          "case": 28,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        }
+      ],
+      "per_key": {
+        "component": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "severity": {
+          "accuracy": 0.8,
+          "correct": 24,
+          "decided": 30
+        },
+        "user_facing": {
+          "accuracy": 0.9333333333333333,
+          "correct": 28,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 18754.433333333334,
+      "wall_ms_p95": 29075
+    },
+    "judge_informed": {
+      "accuracy": 0.8555555555555555,
+      "calls": 30,
+      "calls_by_backend": {
+        "devin": 30
+      },
+      "correct": 77,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 301,
+      "mismatches": [
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 8,
+          "expected": 2,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 3,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 3,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 18,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 15,
+          "expected": 0,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 23,
+          "expected": 1,
+          "got": 2,
+          "key": "severity"
+        },
+        {
+          "case": 25,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 27,
+          "expected": false,
+          "got": true,
+          "key": "user_facing"
+        },
+        {
+          "case": 28,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 19,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        }
+      ],
+      "per_key": {
+        "component": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "severity": {
+          "accuracy": 0.7,
+          "correct": 21,
+          "decided": 30
+        },
+        "user_facing": {
+          "accuracy": 0.8666666666666667,
+          "correct": 26,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 22017.933333333334,
+      "wall_ms_p95": 41997
+    },
+    "jury": {
+      "accuracy": 0.8333333333333334,
+      "calls": 120,
+      "calls_by_backend": {
+        "devin": 120
+      },
+      "correct": 75,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 0,
+      "mismatches": [
+        {
+          "case": 3,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 3,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 5,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 7,
+          "expected": 2,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 8,
+          "expected": 2,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 9,
+          "expected": "db",
+          "got": "auth",
+          "key": "component"
+        },
+        {
+          "case": 12,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 15,
+          "expected": 0,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 19,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 19,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 23,
+          "expected": 1,
+          "got": 2,
+          "key": "severity"
+        },
+        {
+          "case": 28,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 27,
+          "expected": false,
+          "got": true,
+          "key": "user_facing"
+        }
+      ],
+      "per_key": {
+        "component": {
+          "accuracy": 0.9666666666666667,
+          "correct": 29,
+          "decided": 30
+        },
+        "severity": {
+          "accuracy": 0.6333333333333333,
+          "correct": 19,
+          "decided": 30
+        },
+        "user_facing": {
+          "accuracy": 0.9,
+          "correct": 27,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 29547.633333333335,
+      "wall_ms_p95": 37179
+    },
+    "jury_memory": {
+      "accuracy": 0.8888888888888888,
+      "calls": 120,
+      "calls_by_backend": {
+        "devin": 120
+      },
+      "correct": 80,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 301,
+      "mismatches": [
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 3,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 8,
+          "expected": 2,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 15,
+          "expected": 0,
+          "got": 1,
+          "key": "severity"
+        },
+        {
+          "case": 18,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 23,
+          "expected": 1,
+          "got": 2,
+          "key": "severity"
+        },
+        {
+          "case": 25,
+          "expected": true,
+          "got": false,
+          "key": "user_facing"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        },
+        {
+          "case": 27,
+          "expected": false,
+          "got": true,
+          "key": "user_facing"
+        },
+        {
+          "case": 28,
+          "expected": 1,
+          "got": 0,
+          "key": "severity"
+        }
+      ],
+      "per_key": {
+        "component": {
+          "accuracy": 1.0,
+          "correct": 30,
+          "decided": 30
+        },
+        "severity": {
+          "accuracy": 0.8,
+          "correct": 24,
+          "decided": 30
+        },
+        "user_facing": {
+          "accuracy": 0.8666666666666667,
+          "correct": 26,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 31469.733333333334,
+      "wall_ms_p95": 45254
+    }
+  },
+  "cases": 60,
+  "config": {
+    "escalate": "Sync",
+    "hung_threshold": 0.5,
+    "judge": "devin:swe-2-high",
+    "jurors": [
+      "devin:swe-2-medium",
+      "devin:swe-2-high"
+    ],
+    "min_quorum": 2,
+    "samples": 2
+  },
+  "contested_written": 0,
+  "go": {
+    "accuracy_gap_jury_to_judge": 0.07777777777777772,
+    "gap_closed_by_memory": 0.7142857142857136,
+    "hung_rate_drop": 0.0,
+    "memory_delta_vs_jury": 0.05555555555555547,
+    "pass": true
+  },
+  "label": "log_triage",
+  "rulings_written": 8,
+  "seed": 7,
+  "test": 30,
+  "train": 30,
+  "train_escalations": 3
+}

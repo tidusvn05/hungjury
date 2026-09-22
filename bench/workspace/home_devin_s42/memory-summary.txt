@@ -1,0 +1,27 @@
+memory.db summary — bench/workspace/home_devin_s42
+generated: 2026-09-22 · source: sqlite3 dump (audit evidence — eval throwaway db snapshot)
+
+== entries by kind/status ==
+kind       | status    | count | trust_range
+fact | active | 7 | 0.80..0.80
+precedent | active | 1 | 0.80..0.80
+ruling | active | 3 | 0.40..0.80
+
+== entries by scope ==
+scope | count
+q:ws.code_health | 1
+q:ws.has_ci | 1
+q:ws.purpose | 2
+ws:b886205f76ba8cb826919871322f1dff8cd87a26 | 7
+
+== contested rows ==
+id | kind | scope | trust | text
+(none)
+
+== other tables ==
+decisions | 30
+queue | 0
+juror_stats | 3
+
+== calls.jsonl ==
+470 lines

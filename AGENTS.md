@@ -234,7 +234,7 @@ Security-gate loop (loop-until-dry): rerun the gate only while it reports **new*
 
 Orientation, not routing: `bee bee list` and `bee status` carry live platform health, and `bee bee show <name>` has the write scope. Never dispatch a bee on a platform reported unavailable.
 
-Platforms: claude=2.1.278, codex=0.154.0, devin=3000.10.31
+Platforms: claude=2.1.278, codex=0.155.1, devin=3000.11.1
 
 - **implementer** — implementer-devin
 - **researcher** · swarms — researcher-devin

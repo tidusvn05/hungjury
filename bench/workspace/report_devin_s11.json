@@ -1,0 +1,554 @@
+{
+  "arms": {
+    "judge": {
+      "accuracy": 0.8133333333333334,
+      "calls": 30,
+      "calls_by_backend": {
+        "devin": 30
+      },
+      "correct": 61,
+      "decided": 75,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 0,
+      "mismatches": [
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 3,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 0,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 8,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 10,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 9,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 17,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 18,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 19,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 23,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 29,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 20,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        }
+      ],
+      "per_key": {
+        "code_health": {
+          "accuracy": 0.68,
+          "correct": 17,
+          "decided": 25
+        },
+        "has_ci": {
+          "accuracy": 0.76,
+          "correct": 19,
+          "decided": 25
+        },
+        "purpose": {
+          "accuracy": 1.0,
+          "correct": 25,
+          "decided": 25
+        }
+      },
+      "unscored": 15,
+      "wall_ms_mean": 36270.566666666666,
+      "wall_ms_p95": 57385
+    },
+    "judge_informed": {
+      "accuracy": 0.8133333333333334,
+      "calls": 30,
+      "calls_by_backend": {
+        "devin": 30
+      },
+      "correct": 61,
+      "decided": 75,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 180,
+      "mismatches": [
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 3,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 9,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 8,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 10,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 18,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 19,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 17,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 23,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 29,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        }
+      ],
+      "per_key": {
+        "code_health": {
+          "accuracy": 0.68,
+          "correct": 17,
+          "decided": 25
+        },
+        "has_ci": {
+          "accuracy": 0.76,
+          "correct": 19,
+          "decided": 25
+        },
+        "purpose": {
+          "accuracy": 1.0,
+          "correct": 25,
+          "decided": 25
+        }
+      },
+      "unscored": 15,
+      "wall_ms_mean": 37318.566666666666,
+      "wall_ms_p95": 60991
+    },
+    "jury": {
+      "accuracy": 0.8222222222222222,
+      "calls": 142,
+      "calls_by_backend": {
+        "devin": 142
+      },
+      "correct": 74,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 0,
+      "mismatches": [
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 0,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 7,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 7,
+          "expected": "service",
+          "got": "app",
+          "key": "purpose"
+        },
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 9,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 10,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 17,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 16,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 20,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 20,
+          "expected": "service",
+          "got": "app",
+          "key": "purpose"
+        },
+        {
+          "case": 23,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 21,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        }
+      ],
+      "per_key": {
+        "code_health": {
+          "accuracy": 0.7333333333333333,
+          "correct": 22,
+          "decided": 30
+        },
+        "has_ci": {
+          "accuracy": 0.8,
+          "correct": 24,
+          "decided": 30
+        },
+        "purpose": {
+          "accuracy": 0.9333333333333333,
+          "correct": 28,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 69005.7,
+      "wall_ms_p95": 107783
+    },
+    "jury_memory": {
+      "accuracy": 0.7666666666666667,
+      "calls": 141,
+      "calls_by_backend": {
+        "devin": 141
+      },
+      "correct": 69,
+      "decided": 90,
+      "est_cost_usd": null,
+      "hung": 0,
+      "hung_rate": 0.0,
+      "memory_injected": 210,
+      "mismatches": [
+        {
+          "case": 2,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 3,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 0,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 4,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 4,
+          "expected": "service",
+          "got": "app",
+          "key": "purpose"
+        },
+        {
+          "case": 8,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 10,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 9,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 7,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 12,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 17,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 18,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 19,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        },
+        {
+          "case": 23,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 25,
+          "expected": false,
+          "got": true,
+          "key": "has_ci"
+        },
+        {
+          "case": 21,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 16,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 27,
+          "expected": 1,
+          "got": 2,
+          "key": "code_health"
+        },
+        {
+          "case": 27,
+          "expected": "service",
+          "got": "app",
+          "key": "purpose"
+        },
+        {
+          "case": 29,
+          "expected": 0,
+          "got": 1,
+          "key": "code_health"
+        }
+      ],
+      "per_key": {
+        "code_health": {
+          "accuracy": 0.5666666666666667,
+          "correct": 17,
+          "decided": 30
+        },
+        "has_ci": {
+          "accuracy": 0.8,
+          "correct": 24,
+          "decided": 30
+        },
+        "purpose": {
+          "accuracy": 0.9333333333333333,
+          "correct": 28,
+          "decided": 30
+        }
+      },
+      "unscored": 0,
+      "wall_ms_mean": 73144.03333333334,
+      "wall_ms_p95": 177368
+    }
+  },
+  "cases": 60,
+  "config": {
+    "escalate": "Sync",
+    "hung_threshold": 0.5,
+    "judge": "devin:swe-2-high",
+    "jurors": [
+      "devin:swe-2-medium",
+      "devin:swe-2-high"
+    ],
+    "min_quorum": 2,
+    "samples": 2
+  },
+  "contested_written": 0,
+  "go": {
+    "accuracy_gap_jury_to_judge": -0.008888888888888835,
+    "gap_closed_by_memory": 0.0,
+    "hung_rate_drop": 0.0,
+    "memory_delta_vs_jury": -0.05555555555555547,
+    "pass": false
+  },
+  "label": "workspace",
+  "rulings_written": 3,
+  "seed": 11,
+  "test": 30,
+  "train": 30,
+  "train_escalations": 1
+}
