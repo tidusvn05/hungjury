@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-22
+
+### Added
+
+- Eval reports now carry audit fields — `train_escalations`,
+  `rulings_written`, `contested_written`, `unscored` — with a test
+  asserting the accounting invariant `decided + hung + unscored =
+  total`.
+- `bench/microbench.sh` — microbenchmark runner that writes raw
+  `calls.jsonl` evidence per run.
+- `docs/REPORT-2026-09-21.md` — audit of the published benchmark
+  claims.
+- Devin-only multi-seed benchmark reruns (3 seeds) for `email_intent`,
+  `log_triage`, `multilingual`, `workspace`, and `support`, with
+  per-seed reports and committed `home_devin_s*` evidence.
+
+### Fixed
+
+- Corrected benchmark claims in README and `docs/BENCHMARK.md`:
+  `jury >= judge` holds on 4/7 domains (not 5/7), worst-case memory
+  harm is -13.3pts with mean -11.1 (not -17), and the workspace domain
+  hung 3/90 cases (not 1).
+
 ## [0.2.1] - 2026-09-21
 
 ### Added
@@ -137,4 +160,5 @@ judge again.
   decision linkage); demote/contest paths remain available for
   correction.
 
+[0.3.0]: https://github.com/tidusvn05/hungjury/releases/tag/v0.3.0
 [0.1.0]: https://github.com/tidusvn05/hungjury/releases/tag/v0.1.0

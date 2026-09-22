@@ -2,7 +2,9 @@
 
 > Quyết định có kiểu (typed decisions) từ một "bồi thẩm đoàn" gồm các agent CLI chạy headless — có trí nhớ án lệ.
 
-**Trạng thái:** [v0.1.0 đã release](https://github.com/tidusvn05/hungjury/releases) — binaries cho linux/macos/windows. Kế hoạch triển khai: [docs/PLAN.md](docs/PLAN.md).
+**Trạng thái:** [v0.3.0 đã release](https://github.com/tidusvn05/hungjury/releases) — binaries cho linux/macos/windows. Kế hoạch triển khai: [docs/PLAN.md](docs/PLAN.md).
+
+> **Cảnh báo — trạng thái nghiên cứu:** `hungjury` là một dự án **ý tưởng / nghiên cứu** kèm theo benchmark — **chưa có kinh nghiệm triển khai production thực tế**. Mọi số liệu trong repo (`docs/BENCHMARK.md`, `docs/REPORT-*.md`, README) đều đo trên **dữ liệu tự gán nhãn / tổng hợp**, không đại diện cho dữ liệu thật. Nếu cân nhắc dùng trong production, hãy cẩn thận: tự validate trên dữ liệu thật của bạn, đặt **con người duyệt** các quyết định quan trọng, và coi output là **tín hiệu tham khảo — không phải chân lý**.
 
 ## Ý tưởng
 
