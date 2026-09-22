@@ -1,0 +1,25 @@
+memory.db summary — bench/support/home_devin_s42
+generated: 2026-09-22 · source: sqlite3 dump (audit evidence — eval throwaway db snapshot)
+
+== entries by kind/status ==
+kind       | status    | count | trust_range
+precedent | active | 3 | 0.80..0.80
+ruling | active | 8 | 0.40..0.80
+
+== entries by scope ==
+scope | count
+q:support.department | 5
+q:support.frustration | 2
+q:support.is_urgent | 4
+
+== contested rows ==
+id | kind | scope | trust | text
+(none)
+
+== other tables ==
+decisions | 60
+queue | 0
+juror_stats | 6
+
+== calls.jsonl ==
+843 lines

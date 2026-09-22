@@ -347,13 +347,13 @@ empty `"?"` mail hung inside the pack while its 11 neighbours decided.
 
 ## Rerun 2026-09-21 — devin-only jury
 
-Re-run of the microbenchmarks and four eval domains with **devin as
+Re-run of the microbenchmarks and five eval domains with **devin as
 the only backend** (jury `devin:swe-2-medium` + `devin:swe-2-high`, 2
 samples/juror; judge `devin:swe-2-high`; `min_quorum 2`, `hung_threshold
 0.5`, `escalate Sync`). This is a *different jury configuration* than the
 mixed-backend runs above — the numbers below must not be mixed into those
 tables. Raw data: `bench/micro/{latency,throughput,pack}.jsonl`,
-`bench/{email_intent,log_triage,multilingual,workspace}/report_devin_s{42,7,11}.json`.
+`bench/{support,email_intent,log_triage,multilingual,workspace}/report_devin_s{42,7,11}.json`.
 
 ### Microbench (single sample each — noisy)
 
@@ -372,6 +372,31 @@ tables. Raw data: `bench/micro/{latency,throughput,pack}.jsonl`,
 
 `--pack 12` cut juror calls 36→3 and wall ~2.5× on the 3-sample run —
 consistent with the earlier spike, on a different backend config.
+
+### `support`, 3 seeds (42 / 7 / 11)
+
+Accuracy on the 60-case test arm (n=120; 60/60 split), mean ± sample sd
+across seeds:
+
+| arm | s42 | s7 | s11 | mean±sd | orig |
+|---|---|---|---|---|---|
+| jury | 90.0% | 93.3% | 93.9% | 92.4±2.1% | 91% |
+| jury + memory | 92.2% | 95.0% | 95.6% | **94.3±1.8%** | 95% |
+| judge (cold) | 92.8% | 94.4% | 95.6% | **94.3±1.4%** | 96% |
+| judge_informed | 92.8% | 93.9% | 93.9% | 93.5±0.6% | — |
+
+- **The memory-helps headline reproduces**: `jury_memory` closed the
+  jury→judge gap on every seed (`gap_closed_by_memory` 80% / 150% /
+  100% on s42/s7/s11 — s7 overshot, 95.0 vs judge 94.4) and tied the
+  judge at 94.3 mean.
+- Direction vs the original run: the jury improved (92.4 vs 91) while
+  the lone judge dropped (94.3 vs 96) — the devin-only ensemble
+  narrowed the jury→judge gap from 5.0 to 1.9 pts.
+- `hung_rate` 0% on all arms and seeds; train escalations 3/2/5 →
+  8/5/5 rulings, 0 contested.
+- `orig` has no `judge_informed` value: `bench/support/report.json`
+  predates that arm (and the audit fields) — the original support
+  table above has 3 arms only.
 
 ### `email_intent`, 3 seeds (42 / 7 / 11)
 
@@ -394,7 +419,7 @@ Accuracy on the 30-case test arm, mean ± sample sd across seeds:
   seed where a judge ruling was actually written; consistent with the
   poisoning pattern, though n=1 ruling is far from conclusive.
 
-The remaining three domains follow the same format. The `orig` column
+The other four domains follow the same format. The `orig` column
 repeats the original seed-42 mixed-backend row from the results table
 above — *different jury/judge config, not directly comparable*.
 
